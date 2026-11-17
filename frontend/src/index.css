@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-surface-900 text-slate-200 antialiased;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded bg-surface-600;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* 数值变化闪烁（第3期视觉打磨）：盘中数据刷新时短暂高亮，红涨绿跌 */
+@keyframes flashUp {
+  0% { background-color: rgba(240, 68, 56, 0.35); }
+  100% { background-color: transparent; }
+}
+@keyframes flashDown {
+  0% { background-color: rgba(16, 185, 129, 0.35); }
+  100% { background-color: transparent; }
+}
+.flash-up {
+  animation: flashUp 0.8s ease-out;
+  border-radius: 4px;
+}
+.flash-dn {
+  animation: flashDown 0.8s ease-out;
+  border-radius: 4px;
+}

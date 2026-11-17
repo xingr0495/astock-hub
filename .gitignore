@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+
+# 运行时数据（行情/账号/台账等，一律不入库）
+data/
+*.log
+
+# 本地配置（含密钥，绝不入库）
+config.toml
+.env
+.env.*
+
+# 工具/临时
+.claude/
+.DS_Store

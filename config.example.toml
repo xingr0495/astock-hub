@@ -1,0 +1,170 @@
+# astock-hub 配置模板
+#
+# 使用方法：复制本文件为 config.toml 再修改。config.toml 已被 .gitignore 排除，不会提交。
+# 相对路径以项目根目录为基准解析；留空（''）的可选项在对应数据缺失时自动跳过。
+# 所有项均可被环境变量覆盖，环境变量优先级最高（方括号内为对应环境变量）。
+#
+# 开箱即用：不填任何外部路径也能启动，行情默认走腾讯免费源；
+# 填入你自己的同花顺 hithink / iFinD 凭证可解锁更高质量数据。
+
+[tencent]
+# 免费行情源（qt.gtimg.cn，无需凭证）——默认兜底
+# [ASTOCK_HUB_TENCENT_BASE]
+base_url = "https://qt.gtimg.cn/q="
+
+[national_team]
+# 可选：国家队持仓透视系统 PostgreSQL 连接串 [ASTOCK_HUB_NT_DSN]
+# 请替换为你自己的连接信息；没有可留空
+dsn = ""
+# 可选：ETF 份额追踪输出文件 [ASTOCK_HUB_NT_ETF_JSON]
+etf_json_path = ""
+etf_json_daily_path = "data/nt_etf_daily.json"  # 日频份额（nt_etf_daily_fetch.py 产出；相对路径按项目根解析，缺省回落周内均摊）
+# refresh 用的项目运行环境；没有可留空
+project_dir = ""
+python = ""
+etf_project_dir = ""
+etf_python = ""
+
+[zsxq]
+# 可选：知识星球汇总输出目录 [ASTOCK_HUB_ZSXQ_OUTPUT]
+output_dir = ""
+# refresh 用：项目目录与星球 group_id
+project_dir = ""
+group_id = ""
+
+[hithink]
+# 可选：hithink-finance CLI（同花顺同源；需在 PATH 中）[ASTOCK_HUB_HITHINK_CLI]
+cli = "hithink-finance"
+timeout_sec = 30
+
+[ifind]
+# 可选：同花顺 iFinD MCP 目录（专业数据；官网个人中心获取 auth_token）
+# [ASTOCK_HUB_IFIND_SKILL_DIR]
+skill_dir = ""
+node = "node"
+timeout_sec = 90
+
+[tushare]
+# 可选：Tushare Pro（tushare.pro 注册获取 token；免费额度+积分）[ASTOCK_HUB_TUSHARE_TOKEN]
+api_key = ""
+# 接口地址，默认官方 [ASTOCK_HUB_TUSHARE_URL]
+base_url = "http://api.tushare.pro"
+
+# ===== 数据源路由 =====
+[data_source]
+# primary: 主数据源（2026-10-13 起 axdata 通达信协议栈优先，无腾讯式突发风控）
+#   该键由单股 K 线（core/kline）与全市场冷路径（store/market_data）两个路由器共用
+#   "axdata" - axdata 通达信协议栈（默认；本地协议，失败自动降级腾讯）
+#   "astock_data" - a-stock-data 工具包（腾讯K线+通达信盘后包）
+#   "hithink" - hithink-finance CLI（需凭证，有 1GB 内存限制）
+primary = "axdata"
+# fallback: 主源失败时自动切换到此源
+fallback = "hithink"
+# board_fund_flow = "kph"     # 板块资金榜主源：kph=开盘红(默认) / eastmoney=回退东财
+# tdx_sync_protocol: 当日落库改走通达信协议快照（2026-10-13 用户批准的阶段三）
+#   true=当日盘后用协议直取（失败自动降级盘后包），false=纯盘后包
+tdx_sync_protocol = true
+
+[a_stock_data]
+# 可选：a-stock-data 工具包（GitHub simonlin1212/a-stock-data，10.3k stars，34个数据源免Key）
+# 用于获取腾讯K线、通达信盘后包等数据
+skill_path = "F:/a-stock-data/SKILL.md"
+
+[ta]
+# 可选：TradingAgents-astock 深度多 Agent 分析（个股页"深度分析"按钮）
+project_dir = ""
+python = ""
+run_script = ""
+provider = "openai_compatible"
+backend_url = "https://api.xiaomimimo.com/v1"
+deep_model = "mimo-v2.6-flash"
+quick_model = "mimo-v2.6-flash"
+timeout_sec = 2400
+
+[llm]
+# 产业链深度研究用 LLM（openai_compatible 网关；密钥复用 env_file 或环境变量）
+backend_url = "https://api.xiaomimimo.com/v1"
+deep_model = "mimo-v2.6-flash"
+quick_model = "mimo-v2.6-flash"
+env_file = ""
+timeout_sec = 120
+
+[web]
+# 数据源开关：true=停用 tickflow（K线/行情改其他可用源）
+# [ASTOCK_HUB_WEB_DISABLE_TICKFLOW]
+disable_tickflow = true
+
+# ==================== 推送与告警 ====================
+
+[notify]
+# 推送通知：大盘复盘 / 个股分析 / 价格告警 / 策略信号
+enabled = false
+# 推送内容过滤（留空或不填 = 全部推）
+# 可选：review（大盘复盘）、analysis（个股分析）、alert（告警）、signal（策略信号）
+filter = []
+
+# 飞书/企微 Webhook 目标（可配多个）
+[[notify.targets]]
+url = ""
+type = "feishu"          # feishu / wechat / dingtalk
+# filter = ["review"]    # 只推大盘复盘
+
+# [[notify.targets]]
+# url = ""
+# type = "wechat"
+
+[alert]
+# 告警规则存储目录
+data_dir = "./data"
+
+[hithink_data]
+# 本地全市场行情库（hithink-finance CLI 维护：data init 全量、data sync 增量）
+# 情绪周期/主线/RPS 的全市场历史从这里取（走 db export 只读 SQL）
+# [ASTOCK_HUB_HITHINK_CACHE / ASTOCK_HUB_HITHINK_STORE]
+cache_dir = "./data/hithink_cache"
+# 判研结果（情绪周期时序等）落盘目录
+store_dir = "./data"
+
+
+# 三层择时框架阈值（v1 经验值；缺省即下方默认，调参改这里、重启生效）
+[timing]
+emotion_strong = 60   # regime 情绪分 ≥60 算强（<60 弱侧，中性并入弱侧）
+emotion_hot = 80      # ≥80 过热（任何模式降档）
+vol_high = 70         # 波动率分位 ≥70 = 高波动（→套利 3-5 成仓）
+
+[tq]
+# 通达信 TdxQuant 交易通道（help.tdx.com.cn/quant；需通达信客户端运行+交易模块登录）
+# 注意：面板密码锁上线前，勿把面板暴露到局域网/公网（enabled=true 时局域网设备可下单）
+enabled = false          # 总开关；另有 data/tq/kill.flag 文件闸双保险
+base_url = "http://127.0.0.1:17709/"
+timeout_sec = 8
+single_order_max_amount = 20000   # 单笔最多 2 万元
+daily_max_orders = 10             # 每日最多 10 笔委托
+price_slip_pct = 0.02             # 限价偏离现价上限 ±2%
+
+[auth]
+# AI 对话每日限额（每账号；0=不限；管理员永不限）
+ai_daily_limit = 50
+# 登录会话有效期（天）
+session_days = 30
+
+
+[paper]
+# 模拟盘盘中实时引擎（11-05 上线）
+realtime = true
+# 成交通知①：镜像到本地通达信 TQ 待确认委托（11-09；默认关，需同时 [tq] enabled=true）
+# 模拟盘 BUY/SELL 成交后向通达信发同标的/同价/同量委托——客户端弹窗提醒你
+# 决定是否实盘跟单，**不是自动实盘**（实盘仍需客户端确认，受 TQ 总闸约束）。
+mirror_to_tq = false
+# 成交通知②：飞书（默认开，复用 [alert] 的 webhook；alert_enabled 且已配地址才发）
+# 逐笔成交通知，不占定时链告警的白名单与防重键。
+notify_feishu = true
+
+[minute_capture]
+# 每交易日盘后全市场分钟抓取（2026-11-12 规格；计划任务 18:30 触发）
+# 并发抓取线程数（探针实测见 docs/superpowers/specs/2026-11-11-minute-capture-design.md §3.3）
+workers = 6
+# 单票网络失败重试次数（退避 2s/5s）
+retry = 2
+# 完整性告警阈值：失败票数/宇宙 > (1-success_rate) → 飞书 minute-store 告警
+success_rate = 0.95
