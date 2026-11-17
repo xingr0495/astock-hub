@@ -211,40 +211,9 @@ def _auth_classify(method: str, path: str) -> str:
 
 @app.middleware("http")
 async def _auth_gate(request, call_next):
-    path = request.url.path
-    if not path.startswith(API_PREFIX + "/"):
-        return await call_next(request)     # 静态资源/SPA：登录页由前端路由处理
-    verdict = _auth_classify(request.method, path)
-    if verdict == "public":
-        return await call_next(request)
-    # 服务令牌（任务 13）：定时链脚本带 X-Service-Token 穿透（合成 admin）；
-    # 令牌错误/缺失 → 落回会话判定（fail-closed，最终 401）
-    token_hdr = request.headers.get("x-service-token")
-    if token_hdr and _auth.check_service_token(token_hdr):
-        request.state.user = _auth.service_user()
-        return await call_next(request)
-    if _auth._TEST_BYPASS:
-        request.state.user = _auth.bypass_user()
-        return await call_next(request)
-    token = request.cookies.get("ah_session")
-    user = _auth.validate_session(token)
-    if user is None:
-        return _json({"error": "unauthenticated"}, status_code=401)
-    request.state.user = user
-    if verdict == "auth":
-        return await call_next(request)
-    if verdict == "admin":
-        if not user.get("is_admin"):
-            return _json({"error": "forbidden", "required": "admin"}, status_code=403)
-        return await call_next(request)
-    if verdict.startswith("any:"):          # 复合判定：任一权限命中即放行
-        keys = verdict[4:].split(",")
-        if not any(_auth.has_perm(user, k) for k in keys):
-            return _json({"error": "forbidden", "required": "|".join(keys)},
-                         status_code=403)
-        return await call_next(request)
-    if not _auth.has_perm(user, verdict):
-        return _json({"error": "forbidden", "required": verdict}, status_code=403)
+    # 免费版：单用户机主模式（无多账号/登录墙）——注入合成 admin 全权限放行。
+    # 注意：本模式无访问控制，公网部署请自行加反向代理鉴权。
+    request.state.user = _auth.service_user()
     return await call_next(request)
 
 
@@ -300,8 +269,14 @@ def _start_paper_intraday_scheduler():
             "paper intraday scheduler failed: %s", _e)
 
 # 注册认证与账号路由
-from .webapi_auth import router as auth_router
-app.include_router(auth_router)
+
+
+@app.get(f"{API_PREFIX}/auth/session")
+def api_auth_session_owner():
+    """免费版：机主单用户 session——前端拿到机主即跳过登录墙。"""
+    return _json({"user": {"id": "owner", "username": "owner",
+                           "is_admin": True, "perms": {}},
+                  "need_bootstrap": False, "features": {}})
 
 
 @app.get(f"{API_PREFIX}/health")

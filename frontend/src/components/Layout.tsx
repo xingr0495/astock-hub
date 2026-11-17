@@ -219,18 +219,12 @@ export default function Layout() {
     </div>
   )
 
-  // 底部用户条（桌面侧栏 + 手机抽屉各一份）：当前身份 + 退出登录
+  // 底部用户条：机主单用户（无退出登录）
   const userBar = (
     <div className="mb-2 flex items-center justify-between gap-1 rounded-md bg-surface-800 px-2 py-1.5">
-      <span className="truncate text-[11px] text-slate-300" title={user?.username}>
-        {user?.is_admin ? '👑' : '👤'} {user?.username}
+      <span className="truncate text-[11px] text-slate-300" title="机主（单用户）">
+        👑 机主
       </span>
-      <button
-        onClick={() => logout()}
-        className="shrink-0 text-[11px] text-slate-400 hover:text-slate-200"
-      >
-        退出
-      </button>
     </div>
   )
 

@@ -1,8 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { AuthProvider, useAuth } from './auth'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
 import Layout from './components/Layout'
 import StockAnalysis from './pages/StockAnalysis'
 import Dashboard from './pages/Dashboard'
@@ -14,7 +12,6 @@ import ReviewPage from './pages/ReviewPage'
 import NotifyPage from './pages/NotifyPage'
 import DataSourcesPage from './pages/DataSourcesPage'
 import LlmSettingsPage from './pages/LlmSettingsPage'
-import AccountsPage from './pages/AccountsPage'
 
 function Spinner() {
   return (
@@ -44,19 +41,9 @@ function Require({ perm, feature, children }: {
 function Root() {
   const { user, loading } = useAuth()
   if (loading) return <Spinner />
-  if (!user) {
-    // 未登录：注册页 + 其余一律登录页
-    return (
-      <Routes>
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="*" element={<LoginPage />} />
-      </Routes>
-    )
-  }
+  if (!user) return <div className="p-8 text-center text-sm text-slate-400">后端未连接，请确认面板服务已启动</div>
   return (
     <Routes>
-      <Route path="/login" element={<Navigate to="/" replace />} />
-      <Route path="/register" element={<Navigate to="/" replace />} />
       <Route element={<Layout />}>
         <Route index element={<StockAnalysis />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -69,7 +56,6 @@ function Root() {
         <Route path="/settings/notify" element={<Require perm="__admin__"><NotifyPage /></Require>} />
         <Route path="/settings/sources" element={<Require perm="data_sources"><DataSourcesPage /></Require>} />
         <Route path="/settings/llm" element={<Require perm="llm_settings"><LlmSettingsPage /></Require>} />
-        <Route path="/settings/accounts" element={<Require perm="__admin__"><AccountsPage /></Require>} />
         <Route path="*" element={<StockAnalysis />} />
       </Route>
     </Routes>
