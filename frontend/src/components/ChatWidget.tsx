@@ -52,8 +52,7 @@ const PAGE_NAMES: Record<string, string> = {
   '/watchlist': '自选股',
   '/sector': '板块分析',
   '/review': '大盘复盘',
-  '/backtest': '回测',
-  '/pool': '产业链选股',
+  '/screen': '策略选股',
   '/news': '产业资讯',
   '/settings/notify': '推送设置',
   '/settings/sources': '数据源',
@@ -71,16 +70,16 @@ const PRESET_GROUPS: { group: string; items: PresetQuestion[] }[] = [
   {
     group: '大盘',
     items: [
-      { label: '今日模式判定', send: '今天模式怎么样' },
-      { label: '主线是谁', send: '今天的主线是谁' },
-      { label: '今天能出手吗', send: '今天能出手吗' },
+      { label: '今日市场怎么样', send: '今天市场怎么样' },
+      { label: '主线板块有哪些', send: '今天的主线板块有哪些' },
+      { label: '成交额与涨跌分布', send: '今日成交额与涨跌分布如何' },
     ],
   },
   {
     group: '个股',
     items: [
       { label: '分析XX', fill: '分析 ' },
-      { label: '符合趋势手册吗', send: '符合趋势手册吗' },
+      { label: '该股关键价位', send: '该股关键价位有哪些' },
     ],
   },
 ]

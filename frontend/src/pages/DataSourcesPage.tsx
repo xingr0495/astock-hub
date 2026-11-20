@@ -15,7 +15,7 @@ const SOURCE_CATALOG = [
     desc: '付费（通达信商城数据服务），A股全市场快照/日K/分钟K/五档/除权；Key 为 TDX- 开头，在通达信商城开通数据服务获取。原生协议直连通达信行情服务器，无需接口地址。测试连接约需 30-60 秒' },
   { id: 'tickflow', name: 'TickFlow 在线行情', needKey: true, testable: true,
     defaultBase: 'https://api.tickflow.org',
-    desc: '付费在线行情 API（tickflow.org，与旧本地 tickflow 项目无关）：实时行情/日K分钟K/五档/财务三表。Key 在 tickflow.org 控制台一键生成。免费版无需 Key（free-api.tickflow.org，仅历史日K）。测试连接会真实调用一次交易所列表接口' },
+    desc: '付费在线行情 API（tickflow.org，与旧本地 tickflow 项目无关）：实时行情/日K分钟K/五档/财务三表。Key 在 tickflow.org 控制台一键生成。免费服务无需 Key（free-api.tickflow.org，仅历史日K）。测试连接会真实调用一次交易所列表接口' },
 ]
 
 interface SourceState {

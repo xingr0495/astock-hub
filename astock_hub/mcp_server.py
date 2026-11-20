@@ -3,7 +3,7 @@
 给 Claude Code 等 MCP 客户端提供 17 个工具，与 CLI 共用同一套适配器核心，
 返回同样的 Envelope 结构（dict 形式）。
 
-启动：F:\\astock-hub\\.venv\\Scripts\\python.exe -m astock_hub.mcp_server
+启动：python -m astock_hub.mcp_server
 """
 
 from __future__ import annotations

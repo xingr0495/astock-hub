@@ -22,7 +22,7 @@ from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, Query, Request, UploadFile, File
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -32,7 +32,10 @@ from . import models
 from .config import PROJECT_ROOT, load_config
 from .core.bundle import build_bundle
 from .market.sessions import market_session
-from .pool import build_pool, build_topics
+try:
+    from .pool import build_pool, build_topics
+except ImportError:  # 当前仓库不包含产业链选股模块
+    build_pool = build_topics = None
 from .refresh import ALL_SOURCES, QUICK_SOURCES, run_refresh
 from .symbols import normalize
 
@@ -211,7 +214,7 @@ def _auth_classify(method: str, path: str) -> str:
 
 @app.middleware("http")
 async def _auth_gate(request, call_next):
-    # 免费版：单用户机主模式（无多账号/登录墙）——注入合成 admin 全权限放行。
+    # 当前仓库：单用户机主模式（无多账号/登录墙）——注入合成 admin 全权限放行。
     # 注意：本模式无访问控制，公网部署请自行加反向代理鉴权。
     request.state.user = _auth.service_user()
     return await call_next(request)
@@ -237,7 +240,7 @@ app.include_router(review_router)
 # 主线手册推送（构建/判定/发送在 manual_push；本文件只挂 HTTP 与 startup 调度）
 try:
     from . import manual_push as _manual_push
-except ImportError:  # 免费版：manual_push 已剔除
+except ImportError:  # 当前仓库：manual_push 已剔除
     _manual_push = None
 
 # 注册财务报表与龙虎榜路由
@@ -245,35 +248,18 @@ from .webapi_financial import router as financial_router
 app.include_router(financial_router)
 
 
-# 注册交易通道路由（TdxQuant）
-from .webapi_tq import router as tq_router
-app.include_router(tq_router)
+# 当前仓库不注册实盘交易、模拟盘或回测路由。
 
 
 
-@app.on_event("startup")
-def _start_paper_intraday_scheduler():
-    """模拟盘盘中实时引擎（11-05 用户拍板"跟真实账户一样"）：
-    交易时段 30s 轮询，非当日买入持仓的止损/止盈/条件触发与候选买入即时成交。
-    与 16:00 链共存（settle 当日去重守卫）。失败不阻断面板启动。"""
-    import logging as _lg
-    try:
-        from .paper_trading import intraday as _paper_rt
-        t = _paper_rt.start_intraday_scheduler(
-            Path(__file__).resolve().parents[1], _get_cfg())
-        _lg.getLogger("astock_hub.webapi").info(
-            "paper intraday scheduler: %s",
-            "started" if t else "disabled (paper.realtime=false)")
-    except Exception as _e:  # noqa: BLE001 — 引擎起不来退回纯批量模型
-        _lg.getLogger("astock_hub.webapi").warning(
-            "paper intraday scheduler failed: %s", _e)
+# 当前仓库不启动模拟盘、回测或交易调度。
 
 # 注册认证与账号路由
 
 
 @app.get(f"{API_PREFIX}/auth/session")
 def api_auth_session_owner():
-    """免费版：机主单用户 session——前端拿到机主即跳过登录墙。"""
+    """当前仓库：机主单用户 session——前端拿到机主即跳过登录墙。"""
     return _json({"user": {"id": "owner", "username": "owner",
                            "is_admin": True, "perms": {}},
                   "need_bootstrap": False, "features": {}})
@@ -1746,96 +1732,14 @@ def api_zsxq_digest_status():
     return _json(digest_task_status())
 
 
-# ---------------------------------------------------------------- 本地资料
+# ---------------------------------------------------------------- 请求用户参数
 
 def _request_user_kwargs(request: Request) -> dict:
-    """当前请求用户的透传参数（local_docs 各函数 / build_pool 的 **kwargs）。
-
-    测试旁路（auth._TEST_BYPASS，合成账号）不隔离：返回空 dict 走旧全局根——
-    既有测试直接用 user=None 的根读写，保持零改动。生产路径（真实会话）恒带
-    user/is_admin，本地资料与选股第三腿都只碰当前用户的目录。
-    """
+    """当前请求用户的透传参数（兼容保留的可选数据接口）。"""
     if _auth._TEST_BYPASS:
         return {}
     u = request.state.user
     return {"user": u["username"], "is_admin": bool(u.get("is_admin", False))}
-
-
-@app.post(f"{API_PREFIX}/local-docs")
-async def api_local_docs_upload(request: Request,
-                                files: list[UploadFile] = File(...)):
-    """本地上传资料（PDF/TXT/MD/DOCX，单文件 ≤20MB，可多选）。
-    存原文 → 提取文本 → 后台起 LLM 摘要线程；提取失败如实标注不摘要。
-    按当前用户隔离存储。"""
-    from . import local_docs as ld
-    cfg = _get_cfg()
-    ident = _request_user_kwargs(request)
-    payload = [(f.filename or "unnamed", await f.read()) for f in files]
-    saved, rejected = ld.save_uploads(cfg, payload, **ident)
-    for d in saved:
-        ld.start_summary(cfg, d["doc_id"], **ident)   # 内部只对 summarizing 状态起效
-    return _json({"saved": saved, "rejected": rejected})
-
-
-@app.get(f"{API_PREFIX}/local-docs")
-def api_local_docs_list(request: Request):
-    """当前用户的资料清单（按用户隔离）。"""
-    from . import local_docs as ld
-    cfg = _get_cfg()
-    ident = _request_user_kwargs(request)
-    root = ld.root_of(cfg, **ident)
-    docs = ld.list_docs(cfg, **ident)
-    for doc in docs:   # 列表带摘要开头（规格：摘要开头两行 → 前 120 字符）
-        preview = None
-        sp = ld.summary_path_of(root, doc)
-        if sp.exists():
-            try:
-                preview = sp.read_text(encoding="utf-8", errors="replace")[:120]
-            except OSError:
-                preview = None
-        doc["summary_preview"] = preview
-    return _json({"docs": docs})
-
-
-@app.get(f"{API_PREFIX}/local-docs/{{doc_id}}")
-def api_local_docs_detail(request: Request, doc_id: str):
-    from . import local_docs as ld
-    cfg = _get_cfg()
-    ident = _request_user_kwargs(request)
-    doc = ld.get_doc(cfg, doc_id, **ident)
-    if not doc:
-        return JSONResponse(status_code=404,
-                            content={"error": "资料不存在或已删除"})
-    summary = None
-    sp = ld.summary_path_of(ld.root_of(cfg, **ident), doc)
-    if sp.exists():
-        summary = sp.read_text(encoding="utf-8", errors="replace")
-    return _json({"doc": doc, "summary": summary})
-
-
-@app.get(f"{API_PREFIX}/local-docs/{{doc_id}}/raw")
-def api_local_docs_raw(request: Request, doc_id: str):
-    from . import local_docs as ld
-    cfg = _get_cfg()
-    ident = _request_user_kwargs(request)
-    doc = ld.get_doc(cfg, doc_id, **ident)
-    if not doc:
-        return JSONResponse(status_code=404,
-                            content={"error": "资料不存在或已删除"})
-    raw = ld.raw_path_of(ld.root_of(cfg, **ident), doc)
-    if not raw.exists():
-        return JSONResponse(status_code=404, content={"error": "原文文件缺失"})
-    return FileResponse(raw, filename=doc["name"])
-
-
-@app.delete(f"{API_PREFIX}/local-docs/{{doc_id}}")
-def api_local_docs_delete(request: Request, doc_id: str):
-    from . import local_docs as ld
-    ok = ld.delete_doc(_get_cfg(), doc_id, **_request_user_kwargs(request))
-    if not ok:
-        return JSONResponse(status_code=404,
-                            content={"error": "资料不存在或已删除"})
-    return _json({"ok": True})
 
 
 @app.get(f"{API_PREFIX}/news")
@@ -1922,6 +1826,9 @@ _pool_topics_cache: dict = {"time": 0, "data": None}
 
 @app.get(f"{API_PREFIX}/pool/topics")
 def api_pool_topics():
+    """当前仓库不包含产业链选股。"""
+    if build_topics is None:
+        return _json({"error": "当前仓库未包含产业链选股模块"}, status_code=404)
     """选股页主题 chips：预置主题 + 当日主线。
 
     优化：主线数据计算耗时（80秒+），使用缓存避免重复计算。
@@ -2073,6 +1980,9 @@ def api_manual_flags(code: str):
 def api_pool_analyze(request: Request, topic: str,
                      days: int = Query(7, ge=1, le=30),
                      max: int = Query(60, ge=5, le=200)):
+    """当前仓库不包含产业链选股。"""
+    if build_pool is None:
+        return _json({"error": "当前仓库未包含产业链选股模块"}, status_code=404)
     """产业链选股：信息面 → 候选 → 批量验证 → 股票池。
 
     第三腿（本地资料）按当前请求用户取数（透传 user/is_admin）；
@@ -2842,7 +2752,7 @@ def api_notify_manual_push(force: bool = Query(False)):
 @app.on_event("startup")
 def _start_manual_push_scheduler():
     if _manual_push is None:
-        return  # 免费版无此调度
+        return  # 当前仓库无此调度
     _manual_push.start_manual_scheduler(
         _get_cfg(), is_trading_day=_is_trading_day_today)
 

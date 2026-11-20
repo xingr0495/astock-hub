@@ -19,7 +19,6 @@ const NAV: { to: string; label: string; perm?: string; admin?: boolean;
   { to: '/settings/notify', label: '推送设置', admin: true },
   { to: '/settings/sources', label: '数据源', perm: 'data_sources' },
   { to: '/settings/llm', label: '大模型', perm: 'llm_settings' },
-  { to: '/settings/accounts', label: '账号管理', admin: true },
 ]
 
 // 侧栏自定义：服务端 /api/nav-config 为权威（手机/电脑同步），localStorage 为本机兜底与迁移源
@@ -233,10 +232,10 @@ export default function Layout() {
       {/* 桌面侧边栏（≥768px 原样保留） */}
       <aside className="hidden w-44 shrink-0 flex-col border-r border-surface-700 bg-surface-850 md:flex">
         <div className="flex items-center gap-2 px-4 py-5">
-          <span className="text-xl">🧊</span>
+          <img src="/mind-ashare-logo.png" alt="Mind AShare" className="h-9 w-9 rounded-lg object-cover" />
           <div>
             <div className="text-sm font-semibold text-slate-100">astock-hub</div>
-            <div className="text-[11px] text-slate-400">A股五维投研</div>
+            <div className="text-[11px] text-slate-400">Mind AShare · A股数据面板</div>
           </div>
         </div>
         <nav className="mt-2 flex flex-col gap-1 px-2">
@@ -275,8 +274,8 @@ export default function Layout() {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="text-sm font-semibold text-slate-100">🧊 astock-hub</span>
-        <span className="text-[11px] text-slate-500">A股五维投研</span>
+        <span className="text-sm font-semibold text-slate-100"><img src="/mind-ashare-logo.png" alt="" className="inline h-5 w-5 rounded object-cover" /> astock-hub</span>
+        <span className="text-[11px] text-slate-500">Mind AShare</span>
       </div>
 
       {/* 手机侧滑抽屉（<768px） */}
@@ -288,7 +287,7 @@ export default function Layout() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-4">
-              <span className="text-sm font-semibold text-slate-100">🧊 astock-hub</span>
+              <span className="text-sm font-semibold text-slate-100"><img src="/mind-ashare-logo.png" alt="" className="inline h-5 w-5 rounded object-cover" /> astock-hub</span>
               <button
                 onClick={() => setDrawer(false)}
                 aria-label="关闭菜单"

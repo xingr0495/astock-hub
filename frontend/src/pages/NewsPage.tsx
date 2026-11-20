@@ -37,7 +37,7 @@ function _refreshNotice(result: any): string | null {
 
 export default function NewsPage() {
   const qc = useQueryClient()
-  // 免费版：纪要/本地资料已剔除，只保留资讯赛道与管理员刷新
+  // 当前版本：纪要/本地资料已剔除，只保留资讯赛道与管理员刷新
   const { isAdmin } = useAuth()
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const [selected, setSelected] = useState<NewsItem | null>(null)
@@ -128,7 +128,7 @@ export default function NewsPage() {
           ))}
         </aside>
 
-        {/* 新闻列表（免费版：纪要/本地资料面板已剔除，只保留资讯列表） */}
+        {/* 新闻列表（当前版本：纪要/本地资料面板已剔除，只保留资讯列表） */}
         <section className="min-w-0 flex-1 overflow-y-auto p-3 md:p-5">
           {active && (
             <>

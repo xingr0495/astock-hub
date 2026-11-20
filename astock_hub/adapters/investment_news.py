@@ -8,9 +8,8 @@ news.json 结构（与旧 data.js 的 JSON 本体完全一致）：
   {generated_at, recent_days, industries: [{key, name, total, points:[{t,refs}],
      items: [{title,url,time,ts,summary,source, zh?, zh_summary?}]}], stats}
 
-兼容兜底：新档缺失时读旧 F:\\investment-news\\data.js（固定常量，不再读
-config——[investment_news] 配置段已删），health note 标注"旧档，建议跑迁移"。
-兼容期至云端迁移完成后删除。
+兼容兜底：新档缺失时可读仓库兄弟目录 investment-news/data.js；health note
+标注"旧档，建议跑迁移"。
 """
 
 from __future__ import annotations

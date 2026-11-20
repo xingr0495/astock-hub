@@ -11,9 +11,9 @@ if ($listening) {
 }
 
 $python = Join-Path $root ".venv\Scripts\python.exe"
-# Mobile step 0 (2026-11-01): default bind LAN so phones can reach the panel;
-# set ASTOCK_HUB_HOST=127.0.0.1 to keep it local-only.
-$bind = if ($env:ASTOCK_HUB_HOST) { $env:ASTOCK_HUB_HOST } else { '0.0.0.0' }
+# Default to local-only for safety. Set ASTOCK_HUB_HOST=0.0.0.0 explicitly
+# to allow LAN devices, and add your own access control before any public exposure.
+$bind = if ($env:ASTOCK_HUB_HOST) { $env:ASTOCK_HUB_HOST } else { '127.0.0.1' }
 Start-Process -FilePath $python `
     -ArgumentList "-m", "uvicorn", "astock_hub.webapi:app", "--host", $bind, "--port", "8756" `
     -WorkingDirectory $root `

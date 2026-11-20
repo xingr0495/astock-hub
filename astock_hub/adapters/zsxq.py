@@ -1,9 +1,8 @@
-"""zsxq（知识星球汇总）适配器：报告文件扫描 + 关键词切片。
+"""用户自有纪要报告适配器：报告文件扫描 + 关键词切片。
 
-报告在 F:\\zsxq-summary\\output\\，经历过两代命名：
-- 旧：报告_调研鹅纪要_2026-09-03.md
-- 新：9月17日调研鹅纪要汇总_20260917.md（周末合并版如 9月12-13日..._20260913.md）
-以文件名末尾的日期后缀为准；正则不匹配时回退文件 mtime 并标注 date_source。
+本仓库不附带纪要内容；目录由用户在 config.toml [zsxq].output_dir 自行配置，
+缺省为项目内 data/zsxq_output（不存在时如实显示不可用）。
+报告文件名末尾的日期用于识别报告日期。
 """
 
 from __future__ import annotations
@@ -70,8 +69,9 @@ class ZsxqAdapter(Adapter):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        from ..zsxq_fetch import resolve_output_dir
-        self.output_dir = resolve_output_dir(cfg)
+        from ..config import PROJECT_ROOT, resolve_path
+        self.output_dir = (resolve_path(cfg.get("output_dir"))
+                           or PROJECT_ROOT / "data" / "zsxq_output")
 
     def _dir_missing(self) -> models.DimensionResult:
         return self.fail(
@@ -118,7 +118,7 @@ class ZsxqAdapter(Adapter):
         reports = self._list_reports()
         if not reports:
             return self.not_found("还没有任何纪要报告",
-                                  "先运行 F:\\zsxq-summary 的抓取与汇总流程",
+                                  "请先在 [zsxq].output_dir 配置自己的纪要报告目录",
                                   endpoint=str(self.output_dir))
         latest = reports[0]
         try:

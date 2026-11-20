@@ -1,12 +1,10 @@
 """产业链深度研究维度（serenity-skill 方法论）——LLM 研究运行器。
 
-serenity-skill 是"供给链卡点猎手"方法论（F:\\serenity-skill\\SKILL.md），不是
-可直连的数据服务。本模块在 astock-hub 侧复现这条研究链路：
+serenity-skill 是"供给链卡点猎手"方法论，不是可直连的数据服务。本模块在 astock-hub 侧复现这条研究链路：
   收集该股行情/估值/K线/纪要/新闻 → 按 serenity 方法论（先排产业链层级/卡点，
   再排公司，证据分级，给出反方与下一步验证）喂给 LLM → 产出结构化研究报告。
 
-LLM 走与 TradingAgents 相同的 openai_compatible 网关（MiMo），密钥复用
-F:\\TradingAgents-astock\\.env 的 OPENAI_COMPATIBLE_API_KEY。
+LLM 走与 TradingAgents 相同的 openai_compatible 网关，密钥由用户自行配置。
 输出定位：serenity 方法论 + 面板已有数据的**快速扫描版**（非 25 源全量深度调研）。
 """
 

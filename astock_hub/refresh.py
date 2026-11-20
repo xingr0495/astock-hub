@@ -16,10 +16,13 @@ from pathlib import Path
 
 from . import errors, models
 from .adapters.base import timed
-from .zsxq_fetch import fetch_topics, resolve_output_dir
+try:
+    from .zsxq_fetch import fetch_topics, resolve_output_dir
+except ImportError:  # 当前仓库不包含纪要抓取，只保留用户自有报告的读取插槽
+    fetch_topics = resolve_output_dir = None
 
-QUICK_SOURCES = ["etf", "zsxq", "tdx_daily", "news"]
-ALL_SOURCES = ["etf", "zsxq", "news", "national_team", "hithink_data", "tdx_daily"]
+QUICK_SOURCES = ["etf", "tdx_daily", "news"]
+ALL_SOURCES = ["etf", "news", "national_team", "hithink_data", "tdx_daily"]
 
 
 def _run(cmd: list[str], cwd: str | None, timeout: int,
@@ -109,6 +112,9 @@ def refresh_zsxq(cfg: dict, force: bool = False, day: str | None = None) -> mode
     已有原始数据也会补一次汇总（summarize_day 幂等：已汇总跳过、无帖跳过）。
     AI 汇总失败只记 note，不影响抓取结果，下轮定时再补。
     """
+    if resolve_output_dir is None:
+        return _result("refresh-zsxq", False, None, None,
+                       "当前仓库未包含纪要抓取与 AI 汇总模块", ok=False)
     zx_cfg = cfg.get("zsxq", {})
     group_id = zx_cfg.get("group_id", "15552822451452")
     output_dir = resolve_output_dir(zx_cfg)

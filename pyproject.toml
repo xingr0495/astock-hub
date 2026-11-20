@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "astock-hub"
 version = "0.3.0"
-description = "A股五维数据聚合层：统一 CLI/MCP 查询 tickflow / 国家队 / DSA / zsxq / hithink-finance"
+description = "可自托管的 A 股数据聚合与 AI 研究面板（系统显示名称：Mind AShare）"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
@@ -13,6 +13,7 @@ dependencies = [
     "duckdb>=1.0",
     # 技术指标计算（从 tickflow 移植，公式用 polars 表达式照搬以保证数值逐位一致）
     "polars>=1,<2",
+    "pandas>=2",
     "pypdf",
     "python-docx",
 ]

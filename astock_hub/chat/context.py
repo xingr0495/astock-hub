@@ -606,10 +606,10 @@ def _block_manual(cfg: dict, intent: Intent) -> _BlockOut:
     """手册就绪度：只贴 intent.symbols 相关股 + 全市场就绪统计（不贴全表）。"""
     try:
         from ..manuals import get_flags
-    except ImportError:  # 免费版：manuals 已剔除
-        return _BlockOut(title="手册就绪度（免费版不含此功能）",
-                         used_label="手册就绪度（免费版不含）", asof="",
-                         core=["免费版不含手册就绪度功能"], extra=[])
+    except ImportError:  # 当前版本：manuals 已剔除
+        return _BlockOut(title="手册就绪度（当前版本不含此功能）",
+                         used_label="手册就绪度（当前版本不含）", asof="",
+                         core=["当前版本不含手册就绪度功能"], extra=[])
 
     doc = get_flags(cfg)
     asof = doc.get("date")
@@ -707,7 +707,7 @@ def _block_smc(cfg: dict, intent: Intent) -> _BlockOut:
     """个股 SMC 结构：日线/周线趋势结论（core.kline 取K线 → indicators.smc 判定）。"""
     from ..core.kline import local_kline_dim
     from ..indicators import smc
-    MIN_BARS, MIN_WEEK_BARS = 80, 12  # 免费版：manuals 已剔除，常量内联
+    MIN_BARS, MIN_WEEK_BARS = 80, 12  # 当前版本：manuals 已剔除，常量内联
 
     symbols = intent.symbols or []
     if not symbols:

@@ -209,12 +209,15 @@ def _zsxq_dimension(cfg: dict, sym: SymbolInfo, name: str | None,
     news_related = (_news_related(cfg, sym) if allow_news else
                     {"tracks": [], "matched_terms": [],
                      "note": "当前账号无 view_news 权限，不回传内容"})
-    from ..adapters.local_docs import LocalDocsAdapter
-    # 传整包 cfg（非 local_docs 配置段——该段不存在）：root_of 需要顶层
-    # _test_data_dir（测试重定向数据目录），生产环境无此键行为不变
-    local_search = LocalDocsAdapter(cfg, user=user, is_admin=is_admin).search(
-        keyword, days=30, max_hits=4)
-    legs = [search, latest, news_search, news_latest, local_search]
+    try:
+        from ..adapters.local_docs import LocalDocsAdapter
+        local_search = LocalDocsAdapter(cfg, user=user, is_admin=is_admin).search(
+            keyword, days=30, max_hits=4)
+    except ImportError:  # 当前仓库不包含本地资料模块
+        local_search = None
+    legs = [search, latest, news_search, news_latest]
+    if local_search is not None:
+        legs.append(local_search)
     if allow_zsxq or allow_news:
         active = [r for r in legs if r.status != models.NOT_APPLICABLE]
         status = _combine_status(active)
@@ -230,7 +233,8 @@ def _zsxq_dimension(cfg: dict, sym: SymbolInfo, name: str | None,
     if allow_news:
         parts.append("investment-news（12 赛道全球产业资讯，按公司行业/概念"
                      "映射相关赛道，出中文要点与个股线索）")
-    parts.append("本地资料（用户上传文档的全文命中）")
+    if local_search is not None:
+        parts.append("本地资料（用户上传文档的全文命中）")
     data = {
         "keyword": keyword,
         "zsxq_mentions": search.to_dict(),
@@ -238,7 +242,8 @@ def _zsxq_dimension(cfg: dict, sym: SymbolInfo, name: str | None,
         "news_mentions": news_search.to_dict(),
         "news_today": news_latest.to_dict(),
         "news_related": news_related,
-        "local_docs_mentions": local_search.to_dict(),
+        "local_docs_mentions": (local_search.to_dict() if local_search is not None else {
+            "status": "not_applicable", "data": {"hits": [], "note": "当前仓库未包含本地资料模块"}}),
         "note": "信息面：" + " + ".join(parts),
     }
     if not name:

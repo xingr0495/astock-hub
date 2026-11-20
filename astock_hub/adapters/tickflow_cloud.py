@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """TickFlow 在线行情 API（docs.tickflow.org）付费源接入（2026-11-07）。
 
-**与已弃用的本地 tickflow 项目（F:\\tickflow-stock-panel）不是一回事**——这是
+**与已弃用的本地 tickflow 项目不是一回事**——这是
 tickflow.org 的在线数据服务，HTTP + `x-api-key` 头鉴权，官方文档见
 docs.tickflow.org/zh-Hans。接入只做「数据源页」的凭证管理与连通性探测，
 不抢行情路由（axdata 主源不变）。
