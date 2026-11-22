@@ -8,8 +8,9 @@ news.json 结构（与旧 data.js 的 JSON 本体完全一致）：
   {generated_at, recent_days, industries: [{key, name, total, points:[{t,refs}],
      items: [{title,url,time,ts,summary,source, zh?, zh_summary?}]}], stats}
 
-兼容兜底：新档缺失时可读仓库兄弟目录 investment-news/data.js；health note
-标注"旧档，建议跑迁移"。
+兼容兜底：新档缺失时读旧版 data.js（固定常量，不再读
+config——[investment_news] 配置段已删），health note 标注"旧档，建议跑迁移"。
+兼容期至云端迁移完成后删除。
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from .base import Adapter, timed
 
 # 旧外部项目产物（兜底读取；迁移脚本 scripts/migrate_investment_news.py）
 LEGACY_DATA_JS = (Path(__file__).resolve().parents[2]
-                  / "investment-news" / "data.js")  # 仓库兄弟目录（本机等价旧 F: 路径）
+                  / "investment-news" / "data.js")  # 仓库兄弟目录（旧版外部项目）
 
 
 class InvestmentNewsAdapter(Adapter):

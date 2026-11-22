@@ -34,7 +34,7 @@ from .core.bundle import build_bundle
 from .market.sessions import market_session
 try:
     from .pool import build_pool, build_topics
-except ImportError:  # 当前仓库不包含产业链选股模块
+except ImportError:  # 免费版不包含产业链选股模块
     build_pool = build_topics = None
 from .refresh import ALL_SOURCES, QUICK_SOURCES, run_refresh
 from .symbols import normalize
@@ -113,7 +113,7 @@ def _web_bundle_payload(code: str, days: int, user: str | None = None,
 
 # ---------------------------------------------------------------- FastAPI app
 
-app = FastAPI(title="astock-hub Web API", version="0.3.0")
+app = FastAPI(title="Mind AShare Web API", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -140,6 +140,7 @@ from . import auth as _auth
 
 _AUTH_PUBLIC = {
     f"{API_PREFIX}/health",
+    f"{API_PREFIX}/license/verify",
     f"{API_PREFIX}/auth/session",
     f"{API_PREFIX}/auth/bootstrap-status",
     f"{API_PREFIX}/auth/bootstrap",
@@ -148,7 +149,7 @@ _AUTH_PUBLIC = {
 }
 _AUTH_ADMIN_PREFIXES = (
     f"{API_PREFIX}/notify", f"{API_PREFIX}/alert",
-    f"{API_PREFIX}/tq",
+    f"{API_PREFIX}/tq", f"{API_PREFIX}/gm",
     f"{API_PREFIX}/ta/", f"{API_PREFIX}/serenity/", f"{API_PREFIX}/refresh",
     f"{API_PREFIX}/market/update", f"{API_PREFIX}/accounts",
 )
@@ -214,8 +215,7 @@ def _auth_classify(method: str, path: str) -> str:
 
 @app.middleware("http")
 async def _auth_gate(request, call_next):
-    # 当前仓库：单用户机主模式（无多账号/登录墙）——注入合成 admin 全权限放行。
-    # 注意：本模式无访问控制，公网部署请自行加反向代理鉴权。
+    # 免费版为机主单用户模式；公网访问由部署层白名单保护。
     request.state.user = _auth.service_user()
     return await call_next(request)
 
@@ -240,7 +240,7 @@ app.include_router(review_router)
 # 主线手册推送（构建/判定/发送在 manual_push；本文件只挂 HTTP 与 startup 调度）
 try:
     from . import manual_push as _manual_push
-except ImportError:  # 当前仓库：manual_push 已剔除
+except ImportError:  # 免费版：manual_push 已剔除
     _manual_push = None
 
 # 注册财务报表与龙虎榜路由
@@ -248,21 +248,53 @@ from .webapi_financial import router as financial_router
 app.include_router(financial_router)
 
 
-# 当前仓库不注册实盘交易、模拟盘或回测路由。
-
-
-
-# 当前仓库不启动模拟盘、回测或交易调度。
-
-# 注册认证与账号路由
+# 免费版不注册实盘交易、模拟盘、回测或多账号路由。
 
 
 @app.get(f"{API_PREFIX}/auth/session")
 def api_auth_session_owner():
-    """当前仓库：机主单用户 session——前端拿到机主即跳过登录墙。"""
     return _json({"user": {"id": "owner", "username": "owner",
                            "is_admin": True, "perms": {}},
                   "need_bootstrap": False, "features": {}})
+
+
+@app.get(f"{API_PREFIX}/rotation-analysis/stream")
+def api_rotation_analysis_stream(request: Request, days: int = 12, kind: str = "concept"):
+    """AI 板块轮动研判（B1-3）：五信号预计算 → LLM 流式输出（NDJSON delta/done）。"""
+    from .llm_client import stream_llm
+    from .market.rotation_analysis import build_messages, rotation_signals
+
+    user = getattr(request.state, "user", None)
+    cfg = _get_cfg()
+    try:
+        signals = rotation_signals(cfg, days=days, kind=kind)
+    except Exception as exc:  # noqa: BLE001
+        return _json({"type": "error", "message": f"信号计算失败：{exc}"})
+
+    def gen():
+        import json as _j
+        try:
+            for text in stream_llm(cfg, build_messages(signals), user=user):
+                yield _j.dumps({"type": "delta", "text": text}, ensure_ascii=False) + "\n"
+            yield _j.dumps({"type": "done"}, ensure_ascii=False) + "\n"
+        except Exception as exc:  # noqa: BLE001
+            yield _j.dumps({"type": "error", "message": str(exc)}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+@app.get(f"{API_PREFIX}/rotation-replay")
+def api_rotation_replay(kind: str = Query("concept", pattern="^(concept|industry)$"),
+                        bucket: int = Query(5),
+                        day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    """盘中板块切换·分钟回放（TSP 核心口径：分钟矩阵 + 1小时换血率）。"""
+    from .market.rotation_replay import rotation_replay
+    if bucket not in (1, 5, 15):
+        bucket = 5
+    try:
+        return _json(rotation_replay(_get_cfg(), kind, bucket, day))
+    except Exception as exc:  # noqa: BLE001 — 辅助图失败不拖垮板块页
+        return _json({"status": "error", "available": False, "error": str(exc)})
 
 
 @app.get(f"{API_PREFIX}/health")
@@ -841,46 +873,6 @@ def _merge_mainline_realtime(cfg, snap: dict) -> dict:
     return out
 
 
-_KPH_EVENTS_CACHE: dict = {"time": 0.0, "key": None, "data": None}
-
-
-@app.get(f"{API_PREFIX}/kph-events")
-def api_kph_events(date: str | None = Query(None),
-                   limit: int = Query(60, ge=1, le=200),
-                   offset: int = Query(0, ge=0)):
-    """开盘红盘面事件流（涨停叙事标签+分钟级时间戳）。**参考注释源，不参与判定**。
-
-    今日盘中 60s 缓存（事件流盘中分钟级更新）；历史日期直查。L2 源失败如实返回。
-    """
-    from datetime import date as _date
-    import time as _time
-    from .kph_client import review_events
-
-    day = date or _date.today().isoformat()
-    env = models.Envelope(command="kph-events", query={"date": day,
-                                                       "limit": limit, "offset": offset})
-    try:
-        if day == _date.today().isoformat():
-            now = _time.time()
-            if (_KPH_EVENTS_CACHE["key"] == (day, limit, offset)
-                    and now - _KPH_EVENTS_CACHE["time"] < 60):
-                env.data = _KPH_EVENTS_CACHE["data"]
-            else:
-                env.data = review_events(day, limit, offset)
-                _KPH_EVENTS_CACHE.update({"time": now, "key": (day, limit, offset),
-                                          "data": env.data})
-        else:
-            env.data = review_events(day, limit, offset)
-    except Exception as exc:  # noqa: BLE001
-        env.data = models.DimensionResult(
-            status=models.UNAVAILABLE, source="kaipanhong",
-            data={"hint": f"开盘红盘面事件获取失败：{exc}"}).to_dict()
-    return _json(env.to_dict())
-
-
-_KPH_LIVE_CACHE: dict = {"key": None, "time": 0.0, "data": None}
-
-
 @app.get(f"{API_PREFIX}/nt-monitor")
 def api_nt_monitor(days: int = Query(10, ge=1, le=60)):
     """国家队宽基 ETF 份额「当日增持」监控（周频按交易日均摊估计）。
@@ -891,81 +883,6 @@ def api_nt_monitor(days: int = Query(10, ge=1, le=60)):
     from .nt_monitor import monitor_summary
     env = models.Envelope(command="nt-monitor", query={"days": days})
     env.data = monitor_summary(days=days)
-    return _json(env.to_dict())
-
-
-@app.get(f"{API_PREFIX}/kph-live")
-def api_kph_live(date_q: str | None = Query(None, alias="date")):
-    """大盘直播（开盘啦 ZhiBoContent）：今日优先，盘前空回退最近交易日历史。
-
-    参考注释源——只展示不参与判定；60s 缓存，失败不落缓存（防中毒）。
-    date=YYYY-MM-DD 指定回看日（看板选日回看）：直取该日直播档案、不走
-    今日/缓存；date 为今天仍走今日优先路径。历史档案仅覆盖近几日，
-    无条目如实返回 unavailable。
-    """
-    import time as _time
-    from .kph_client import live_history, live_today, normalize_live_items
-    from .store.market_data import db_max_date
-
-    today = date.today().isoformat()
-    now = _time.time()
-
-    if date_q and date_q != today:
-        env = models.Envelope(command="kph-live")
-        try:
-            raw_h = live_history(date_q)
-            items = normalize_live_items(raw_h) if raw_h else []
-        except Exception as e:  # noqa: BLE001
-            env.data = models.DimensionResult(
-                status=models.UNAVAILABLE, source="kaipanhong-live",
-                error={"hint": f"{date_q} 历史直播拉取失败：{e}"}
-            ).to_dict()
-            return _json(env.to_dict())  # 失败不落缓存
-        if not items:
-            env.data = models.DimensionResult(
-                status=models.UNAVAILABLE, source="kaipanhong-live",
-                error={"hint": f"{date_q} 无直播数据（开盘啦直播档案仅覆盖近几日）"}
-            ).to_dict()
-            return _json(env.to_dict())
-        env.data = {"items": items, "fallback": True, "source_date": date_q}
-        return _json(env.to_dict())
-
-    if (_KPH_LIVE_CACHE["key"] == today and _KPH_LIVE_CACHE["time"]
-            and now - _KPH_LIVE_CACHE["time"] < 60):
-        env = models.Envelope(command="kph-live")
-        env.data = _KPH_LIVE_CACHE["data"]
-        return _json(env.to_dict())
-
-    items, fallback, source_date, err = [], False, None, None
-    try:
-        raw = live_today()
-        if raw:
-            items = normalize_live_items(raw)
-    except Exception as e:  # noqa: BLE001 — L2 网络抖动如实记录
-        err = f"今日直播失败：{e}"
-    if not items:
-        try:
-            last_day = db_max_date(_get_cfg())
-            raw_h = live_history(last_day)
-            if raw_h:
-                items = normalize_live_items(raw_h)
-                fallback, source_date = True, last_day
-            elif not err:
-                err = "历史回退无条目"
-        except Exception as e:  # noqa: BLE001
-            err = (f"{err}；" if err else "") + f"历史回退失败：{e}"
-
-    env = models.Envelope(command="kph-live")
-    if not items:
-        env.data = models.DimensionResult(
-            status=models.UNAVAILABLE, source="kaipanhong-live",
-            error={"hint": f"直播源暂无数据（盘前为空属正常）；历史回退亦空/失败：{err or '无条目'}"}
-        ).to_dict()
-        return _json(env.to_dict())  # 失败不写缓存
-
-    data = {"items": items, "fallback": fallback, "source_date": source_date}
-    env.data = data
-    _KPH_LIVE_CACHE.update(key=today, time=now, data=data)
     return _json(env.to_dict())
 
 
@@ -1445,6 +1362,18 @@ def api_regime(days: int = Query(60, ge=10, le=250), refresh: bool = False):
     return _json(env.to_dict())
 
 
+@app.get(f"{API_PREFIX}/phase-mainline-matrix")
+def api_phase_mainline_matrix(days: int = Query(120, ge=20, le=250),
+                              kind: str = Query("concept", pattern="^(concept|industry)$")):
+    """情绪阶段 × 主线历史矩阵（阶段段内 top5 主线）。"""
+    from .market.phase_mainline import phase_mainline_matrix
+    try:
+        return _json(phase_mainline_matrix(_get_cfg(), days=days, kind=kind))
+    except Exception as exc:  # noqa: BLE001
+        return _json({"available": False, "reason": "unavailable",
+                      "error": str(exc), "segments": []})
+
+
 @app.get(f"{API_PREFIX}/dashboard")
 def api_dashboard(date: str | None = Query(None),
                   realtime: str = Query("auto"),
@@ -1580,6 +1509,31 @@ def api_dashboard_members(kind: str = Query(..., pattern="^(concept|industry)$")
                   "total": len(rows), "rows": rows})
 
 
+@app.get(f"{API_PREFIX}/sector-intraday")
+def api_sector_intraday(kind: str = Query(..., pattern="^(concept|industry)$"),
+                        name: str = Query(...),
+                        day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    """板块等权分时 vs 全市场（盘后分钟库，60s 缓存，非实时）。"""
+    from .market.sector_intraday import sector_intraday
+    try:
+        return _json(sector_intraday(_get_cfg(), kind, name, day))
+    except Exception as exc:  # noqa: BLE001 — 辅助图不拖垮成分股弹窗
+        return _json({"available": False, "reason": "unavailable",
+                      "error": str(exc), "points": []})
+
+
+@app.get(f"{API_PREFIX}/sector-leader-scores")
+def api_sector_leader_scores(kind: str = Query(..., pattern="^(concept|industry)$"),
+                             name: str = Query(...)):
+    """板块龙头六因子评分 + 热度/风险拆解（最近收盘 + 腾讯市值换手）。"""
+    from .market.leader_score import sector_leader_scores
+    try:
+        return _json(sector_leader_scores(_get_cfg(), kind, name))
+    except Exception as exc:  # noqa: BLE001
+        return _json({"available": False, "reason": "unavailable",
+                      "error": str(exc), "rows": []})
+
+
 @app.get(f"{API_PREFIX}/nt-position")
 def api_nt_position(code: str):
     """国家队在本股上的持仓结论（季报粒度）。"""
@@ -1600,11 +1554,18 @@ def api_valuation(code: str):
     """估值快照（PE/PB/PS，hithink-finance 透传）。"""
     sym = normalize(code)
     adapter = _get_adapters()["hithink"]
-    dim = adapter._run(["valuation", "snapshot", "--thscodes", sym.ts_code])
-    envelope, cmd = dim
-    data = envelope.get("data") or {}
-    return _json(models.Envelope(command="valuation",
-                                 query={"input": code}, data=data).to_dict())
+    try:
+        envelope, cmd = adapter._run(
+            ["valuation", "snapshot", "--thscodes", sym.ts_code])
+        data = envelope.get("data") or {}
+        return _json(models.Envelope(command="valuation",
+                                     query={"input": code}, data=data).to_dict())
+    except Exception as exc:  # noqa: BLE001 — 未配置数据源不能变成 500
+        env = models.Envelope(command="valuation", query={"input": code})
+        env.data = models.DimensionResult(
+            status=models.UNAVAILABLE, source="hithink-finance",
+            data={"hint": f"估值数据源暂不可用：{exc}"}).to_dict()
+        return _json(env.to_dict())
 
 
 @app.get(f"{API_PREFIX}/indexes")
@@ -1700,42 +1661,9 @@ def api_zsxq_search(keyword: str, days: int = Query(7, ge=1, le=30)):
                                  query={"keyword": keyword}, data=dim.to_dict()).to_dict())
 
 
-@app.get(f"{API_PREFIX}/zsxq/week")
-def api_zsxq_week(days: int = Query(7, ge=1, le=14)):
-    """星球纪要最近 N 天逐日状态（原始帖子/汇总报告）。"""
-    from .zsxq_digest import week_status
-    return _json(week_status(_get_cfg(), days=days))
-
-
-@app.get(f"{API_PREFIX}/zsxq/report")
-def api_zsxq_report(date: str):
-    """读某天的星球纪要汇总报告全文。"""
-    from .zsxq_digest import read_report
-    return _json(read_report(_get_cfg(), date))
-
-
-@app.post(f"{API_PREFIX}/zsxq/digest")
-def api_zsxq_digest(payload: dict | None = None):
-    """启动"检测→补缺抓取→LLM 汇总"后台任务（抓取+汇总都耗时，不阻塞请求）。"""
-    from .zsxq_digest import start_digest_task
-    payload = payload or {}
-    return _json(start_digest_task(
-        _get_cfg(), days=int(payload.get("days", 7)),
-        force=bool(payload.get("force", False)),
-        target_date=(payload.get("date") or "").strip() or None))
-
-
-@app.get(f"{API_PREFIX}/zsxq/digest/status")
-def api_zsxq_digest_status():
-    """抓取汇总任务状态（前端轮询）。"""
-    from .zsxq_digest import digest_task_status
-    return _json(digest_task_status())
-
-
 # ---------------------------------------------------------------- 请求用户参数
 
 def _request_user_kwargs(request: Request) -> dict:
-    """当前请求用户的透传参数（兼容保留的可选数据接口）。"""
     if _auth._TEST_BYPASS:
         return {}
     u = request.state.user
@@ -1759,6 +1687,17 @@ def api_news_search(keyword: str, days: int | None = Query(None, ge=1, le=30)):
     dim = _get_adapters()["investment_news"].search(keyword, days=days)
     return _json(models.Envelope(command="news-search",
                                  query={"keyword": keyword}, data=dim.to_dict()).to_dict())
+
+
+@app.get(f"{API_PREFIX}/market/limit-ladder")
+def api_market_limit_ladder(day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    """连板梯队逐层概念/行业分布（本地涨停池收盘口径）。"""
+    from .market.limit_ladder import limit_ladder
+    try:
+        return _json(limit_ladder(_get_cfg(), day))
+    except Exception as exc:  # noqa: BLE001
+        return _json({"available": False, "reason": "unavailable",
+                      "error": str(exc), "layers": []})
 
 
 @app.get(f"{API_PREFIX}/market/limit-pools")
@@ -1817,185 +1756,6 @@ def api_market_limit_pools():
             f"（{latest_trade_date}，本地全市场日线计算），名单盘后提供"
         ),
     }
-    return _json(env.to_dict())
-
-
-# 模块级缓存
-_pool_topics_cache: dict = {"time": 0, "data": None}
-
-
-@app.get(f"{API_PREFIX}/pool/topics")
-def api_pool_topics():
-    """当前仓库不包含产业链选股。"""
-    if build_topics is None:
-        return _json({"error": "当前仓库未包含产业链选股模块"}, status_code=404)
-    """选股页主题 chips：预置主题 + 当日主线。
-
-    优化：主线数据计算耗时（80秒+），使用缓存避免重复计算。
-    """
-    import time as _time
-
-    # 检查缓存（300秒内有效）
-    now = _time.time()
-    if _pool_topics_cache["data"] and now - _pool_topics_cache["time"] < 300:
-        return _json(_pool_topics_cache["data"])
-
-    try:
-        data = build_topics(_get_cfg()).to_dict()
-    except Exception as e:
-        # 失败时返回预置主题（快速回退）
-        from astock_hub.pool import PRESET_TOPICS
-        data = {
-            "schema_version": models.SCHEMA_VERSION,
-            "command": "pool-topics",
-            "generated_at": models.now_iso(),
-            "data": {"preset": PRESET_TOPICS, "mainline": [], "note": f"主线计算失败: {e}"},
-        }
-
-    # 缓存结果
-    _pool_topics_cache["time"] = now
-    _pool_topics_cache["data"] = data
-
-    return _json(data)
-
-
-def _attach_manual_flags(env: models.Envelope) -> None:
-    """把两本手册的就绪度并入选股每行（叠加层，计算失败降级为 None 不拖垮选股）。
-
-    row["manuals"] = {"trend","arb","ice","rps"}（第三本：冰冰点手册，2026-10-29）
-    """
-    rows = (env.data or {}).get("pool") if isinstance(env.data, dict) else None
-    if not isinstance(rows, list):
-        return
-    try:
-        from .manuals import get_flags
-        flags = get_flags(_get_cfg()).get("flags") or {}
-    except Exception:  # noqa: BLE001
-        flags = {}
-    for r in rows:
-        f = flags.get(r.get("symbol") or "")
-        r["manuals"] = ({"trend": bool(f.get("trend_ready")),
-                         "arb": bool(f.get("arb_ready")),
-                         "ice": bool(f.get("ice_ready")),
-                         "rps": f.get("rps")} if f else None)
-
-
-def _attach_digest_manuals(state: dict) -> None:
-    """纪要股票池叠加两本手册就绪度（与产业链选股同口径；裸代码 → ts_code 查缓存）。
-
-    stock["manuals"] = {"trend","arb","ice","rps","limit_days"} | None
-    """
-    stocks = state.get("stocks") if isinstance(state, dict) else None
-    if not isinstance(stocks, list):
-        return
-    try:
-        from .manuals import get_flags
-        flags = get_flags(_get_cfg()).get("flags") or {}
-    except Exception:  # noqa: BLE001 — 叠加层失败不拖垮股票池
-        flags = {}
-    from .symbols import normalize as _norm
-    for s in stocks:
-        try:
-            ts = _norm(str(s.get("symbol") or "")).ts_code
-        except ValueError:
-            s["manuals"] = None
-            continue
-        f = flags.get(ts)
-        s["manuals"] = ({"trend": bool(f.get("trend_ready")),
-                         "arb": bool(f.get("arb_ready")),
-                         "ice": bool(f.get("ice_ready")),
-                         "rps": f.get("rps"),
-                         "limit_days": f.get("limit_days", 0)} if f else None)
-
-
-def _attach_digest_concepts(state: dict) -> None:
-    """纪要池叠加「概念核心 + 当下主线命中」（成分快照口径；任何取数失败留空不炸池）。
-
-    stock 增 industry（同花顺行业，通常 1 个）、concepts（主线命中排前的全部概念）、
-    mainline_concepts（与最新交易日主线排行重合的概念，前端给提示）。
-    """
-    stocks = state.get("stocks") if isinstance(state, dict) else None
-    if not isinstance(stocks, list):
-        return
-    cfg = _get_cfg()
-    from .store.concepts import membership_lookup, concept_view
-    from .market import mainline as ml, service as market_service
-    concept_map = membership_lookup(cfg, "concept")
-    industry_map = membership_lookup(cfg, "industry")
-    # 当下主线以看板「主线格局·五分类」为准：只认主线/次主线（近5日在榜≥2天
-    # 且最新日 rank≤4），单日脉冲/轮动/退潮不给提示；按 rank 顺序保序
-    try:
-        rows = ml.latest_mainline_classified(market_service.store_dir(cfg), "concept")
-        core = {r["member"]: r["cls"] for r in rows if r["cls"] in ("主线", "次主线")}
-    except Exception:  # noqa: BLE001
-        core = {}
-    from .symbols import normalize as _norm
-    for s in stocks:
-        try:
-            ts = _norm(str(s.get("symbol") or "")).ts_code
-        except ValueError:
-            ts = ""
-        s.update(concept_view(concept_map.get(ts, []),
-                              industry_map.get(ts, []), core))
-
-
-@app.get(API_PREFIX + "/manual-flags/{code}")
-def api_manual_flags(code: str):
-    """单票两本手册就绪度（收盘口径缓存 data/manual_flags/）。
-
-    就绪 ≠ 可买：模式闸门（择时框架）另行判定，响应里带上当前模式便于前端提示。
-    """
-    from .manuals import get_flags
-    sym = normalize(code)
-    env = models.Envelope(command="manual-flags", query={"input": code})
-    flags = get_flags(_get_cfg())
-    f = (flags.get("flags") or {}).get(sym.ts_code) or {}
-
-    mode = mode_asof = None
-    try:
-        fw_path = Path(__file__).resolve().parents[1] / "data" / "framework_report_latest.json"
-        fw = json.loads(fw_path.read_text(encoding="utf-8"))
-        mode, mode_asof = fw.get("mode"), fw.get("asof")
-    except Exception:  # noqa: BLE001 — 模式为可选上下文
-        pass
-
-    env.data = {
-        "symbol": sym.ts_code, "date": flags.get("date"),
-        "trend_ready": bool(f.get("trend_ready")),
-        "arb_ready": bool(f.get("arb_ready")),
-        "ice_ready": bool(f.get("ice_ready")),
-        "ice": ({"amt60_yi": f.get("amt60_yi"), "lu60": f.get("lu60"),
-                 "consec": f.get("consec"), "mom60_pct": f.get("mom60_pct")}
-                if f else None),
-        "node": flags.get("node"),
-        "rps": f.get("rps"), "d_trend": f.get("d_trend"),
-        "w_trend": f.get("w_trend"), "limit_days": f.get("limit_days", 0),
-        "mode": mode, "mode_asof": mode_asof,
-        "note": "就绪度为收盘口径（每日16:00链后重算）；就绪≠可买，模式闸门见择时框架",
-    }
-    return _json(env.to_dict())
-
-
-@app.get(f"{API_PREFIX}/pool/analyze")
-def api_pool_analyze(request: Request, topic: str,
-                     days: int = Query(7, ge=1, le=30),
-                     max: int = Query(60, ge=5, le=200)):
-    """当前仓库不包含产业链选股。"""
-    if build_pool is None:
-        return _json({"error": "当前仓库未包含产业链选股模块"}, status_code=404)
-    """产业链选股：信息面 → 候选 → 批量验证 → 股票池。
-
-    第三腿（本地资料）按当前请求用户取数（透传 user/is_admin）；
-    纪要/资讯内容按当前账号能力裁剪（无权限不取不回传）。
-    """
-    topic = topic.strip()
-    if not topic:
-        return _json({"schema_version": models.SCHEMA_VERSION, "command": "pool",
-                      "generated_at": models.now_iso(), "data": {"topic": "", "pool": []},
-                      "note": "请输入主题词"})
-    env = build_pool(_get_cfg(), topic, days=days, max_stocks=max,
-                     **_request_user_kwargs(request), **_content_kwargs(request))
-    _attach_manual_flags(env)
     return _json(env.to_dict())
 
 
@@ -2452,48 +2212,6 @@ def _mount_frontend() -> None:
         return FileResponse(dist / "index.html", media_type="text/html")
 
 
-# ==================== 纪要股票池 ====================
-
-@app.get(f"{API_PREFIX}/digest-pool")
-def api_digest_pool_get():
-    """纪要股票池（按最近提及/提及次数排序；附两本手册就绪度）。"""
-    from . import digest_pool
-    state = digest_pool.get_state()
-    _attach_digest_manuals(state)
-    _attach_digest_concepts(state)
-    return _json(state)
-
-
-@app.post(f"{API_PREFIX}/digest-pool/rebuild")
-def api_digest_pool_rebuild(payload: dict | None = None):
-    """从已存档纪要重建池数据：date 指定单日，days 指定最近 N 天（默认 7）。"""
-    from . import digest_pool
-    payload = payload or {}
-    day = (payload.get("date") or "").strip()
-    if day:
-        return _json(digest_pool.rebuild_from_report(_get_cfg(), day))
-    return _json(digest_pool.rebuild_days(_get_cfg(),
-                                          days=int(payload.get("days", 7))))
-
-
-@app.delete(f"{API_PREFIX}/digest-pool/{{symbol}}")
-def api_digest_pool_remove(symbol: str):
-    """从池中移除一只股票。"""
-    from . import digest_pool
-    return _json(digest_pool.remove(symbol))
-
-
-@app.post(f"{API_PREFIX}/digest-pool/push")
-def api_digest_pool_push(payload: dict | None = None):
-    """手动勾选推送：把池内选中的个股推到飞书（不看就绪度，BJ/ST 剔除）。"""
-    from . import manual_push
-    payload = payload or {}
-    codes = payload.get("symbols")
-    if not isinstance(codes, list) or not codes:
-        return _json({"ok": False, "error": "未选择股票"})
-    return _json(manual_push.push_digest_selection(_get_cfg(), codes))
-
-
 # ==================== 自选股（服务端存储，跨设备同步） ====================
 
 @app.get(f"{API_PREFIX}/watchlist")
@@ -2752,7 +2470,7 @@ def api_notify_manual_push(force: bool = Query(False)):
 @app.on_event("startup")
 def _start_manual_push_scheduler():
     if _manual_push is None:
-        return  # 当前仓库无此调度
+        return  # 免费版无此调度
     _manual_push.start_manual_scheduler(
         _get_cfg(), is_trading_day=_is_trading_day_today)
 

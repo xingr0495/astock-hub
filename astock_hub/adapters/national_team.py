@@ -93,7 +93,7 @@ class NationalTeamAdapter(Adapter):
         return models.DimensionResult(
             status=models.SKIPPED, source=self.source,
             meta=models.SourceMeta(note="国家队持仓透视系统已停用"),
-            data={"note": "国家队持仓透视系统（外部 ETL+PG 项目）已停用"
+            data={"note": "国家队持仓透视系统（旧国家队持仓透视系统（ETL+PG））已停用"
                           "（2026-09-29 起，ETL 维护成本高：tushare 限流/东财风控）。"
                           "国家队维度改用「国家队持仓估计」的宽基 ETF 份额（astock_nt_etf_shares）。"
                           "重新启用：config.toml [national_team] enabled = true，"
@@ -118,7 +118,7 @@ class NationalTeamAdapter(Adapter):
         return self.fail(
             errors.CONNECTION_REFUSED, f"PostgreSQL 连接失败：{exc}",
             "国家队数据库未启动或连接串不对。检查 config.toml 的 [national_team].dsn；"
-            "数据库由使用方自行部署和维护",
+            "数据库属于 旧版透视系统项目",
             retryable=True)
 
     def health(self) -> models.DimensionResult:

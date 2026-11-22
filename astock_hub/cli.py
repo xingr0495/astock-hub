@@ -90,6 +90,39 @@ def _cmd_health(cfg: dict, as_json: bool) -> int:
     return 1 if any(r.status == models.UNAVAILABLE for r in results.values()) else 0
 
 
+def _cmd_datacheck(cfg: dict, as_json: bool = False,
+                   out: str | None = None) -> int:
+    """每日数据体检（手动检查入口；发消息走 python -m astock_hub.data_check）。"""
+    from datetime import date
+
+    from . import data_check
+    report = data_check.gather(cfg, date.today())
+    if out:
+        Path(out).write_text(json.dumps(report, ensure_ascii=False, indent=1),
+                             encoding="utf-8")
+        print(json.dumps({"saved_to": out, "summary": report["summary"]},
+                        ensure_ascii=False))
+    elif as_json:
+        print(json.dumps(report, ensure_ascii=False, indent=1))
+    else:
+        icons = {"ok": "[正常]", "warn": "[关注]", "fail": "[失败]",
+                 "skipped": "[跳过]"}
+        print(f"每日数据体检 {report['date']}"
+              f"（上一交易日 {report['prev_td'] or '未知'}）")
+        print("-" * 60)
+        for i in report["items"]:
+            print(f"{icons.get(i['status'], '[?]')} {i['label']:<16} "
+                  f"{i['detail']}")
+            if i.get("hint") and i["status"] == "fail":
+                print(f"    处理: {i['hint']}")
+        s = report["summary"]
+        print("-" * 60)
+        print(f"通过 {s['ok']} / 关注 {s['warn']} / 失败 {s['fail']} "
+              f"/ 跳过 {s['skipped']}")
+    # 有失败项返回 1（同 health 惯例，方便脚本判断）
+    return 1 if report["summary"]["fail"] else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="astock-hub", description="A 股五维数据聚合层（AI 优先，输出 JSON）")
@@ -104,6 +137,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("health", help="四路数据源健康检查")
     p.add_argument("--json", action="store_true", help="输出结构化 JSON 而非表格")
+
+    p = sub.add_parser("datacheck", help="每日数据体检（只跑只读探针，不发消息）")
+    p.add_argument("--json", action="store_true", help="输出完整 JSON 报告")
+    p.add_argument("--out", help="报告写入文件，stdout 只打印摘要")
 
     p = sub.add_parser("bundle", help="个股五维数据包")
     p.add_argument("code", help="6 位代码（如 600519）或股票名称")
@@ -197,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if cmd == "health":
         return _cmd_health(cfg, args.json)
+    if cmd == "datacheck":
+        return _cmd_datacheck(cfg, as_json=args.json, out=args.out)
     if cmd == "refresh":
         from .refresh import ALL_SOURCES, QUICK_SOURCES, run_refresh
         if args.source:

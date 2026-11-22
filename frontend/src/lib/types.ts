@@ -161,8 +161,9 @@ export interface KlineRow {
 
 /** 面板展示的维度中文名与图标 */
 export const DIMENSION_LABELS: Record<string, { title: string; icon: string }> = {
-  market: { title: '行情与资金', icon: '📈' },
-  fund_flow: { title: '资金流向', icon: '💰' },
-  national_team: { title: '国家队', icon: '🏦' },
+  market: { title: '行情技术面', icon: '📈' },
+  serenity: { title: '产业链基本面', icon: '🔬' },
+  national_team: { title: '国家队资金面', icon: '🏦' },
+  timing: { title: '市场结构与择时', icon: '📊' },
   zsxq: { title: '信息面', icon: '📡' },
 }

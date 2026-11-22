@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { splitNdjson } from '../lib/ndjson'
 
 /** 涨幅轮动热力矩阵：行=板块(最新日涨幅TOP25)、列=近N日、格=当日平均涨幅。
  *  红涨绿降（A股惯例），透明度随 |幅度| 分档；数据=/api/rps 本地计算。 */
@@ -15,6 +16,10 @@ export function RpsHeatmap({ onSelectSector }: {
   onSelectSector: (s: { kind: string; name: string }) => void
 }) {
   const [kind, setKind] = useState<'concept' | 'industry'>('concept')
+  const [track, setTrack] = useState<string | null>(null) // 追踪行：选中的板块逐日排名+涨幅
+  const [analysis, setAnalysis] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisErr, setAnalysisErr] = useState('')
   const [days, setDays] = useState<7 | 12>(7)
   const { data, isLoading } = useQuery({
     queryKey: ['rps', days],
@@ -37,6 +42,33 @@ export function RpsHeatmap({ onSelectSector }: {
     <div className="rounded-xl border border-surface-700 bg-surface-850 p-4">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="text-sm font-medium text-slate-200">板块涨幅轮动矩阵</h2>
+        <button
+          onClick={async () => {
+            setAnalyzing(true); setAnalysis(''); setAnalysisErr('')
+            try {
+              const resp = await fetch(`/api/rotation-analysis/stream?days=${days}&kind=${kind}`)
+              if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`)
+              const reader = resp.body.getReader()
+              const dec = new TextDecoder()
+              let buf = ''
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                buf += dec.decode(value, { stream: true })
+                const { lines, rest } = splitNdjson(buf); buf = rest
+                for (const line of lines) {
+                  if (!line.trim()) continue
+                  const ev = JSON.parse(line)
+                  if (ev.type === 'delta') setAnalysis((a) => a + ev.text)
+                  else if (ev.type === 'error') setAnalysisErr(ev.message || '分析失败')
+                }
+              }
+            } catch (e) { setAnalysisErr((e as Error).message) } finally { setAnalyzing(false) }
+          }}
+          disabled={analyzing}
+          className="rounded border border-brand/50 bg-brand/15 px-2 py-0.5 text-[10px] text-brand hover:bg-brand/25 disabled:opacity-50">
+          {analyzing ? '分析中…' : 'AI 轮动分析'}
+        </button>
         <div className="ml-auto flex gap-1">
           {(['concept', 'industry'] as const).map((x) => (
             <button key={x} onClick={() => setKind(x)}
@@ -70,6 +102,7 @@ export function RpsHeatmap({ onSelectSector }: {
               {top.map(([name]) => {
                 const avg = avgOf(name)
                 return (
+                  <Fragment key={name}>
                   <tr key={name} className="border-t border-surface-700/40">
                     <td onClick={() => onSelectSector({ kind, name })}
                       className="sticky left-0 max-w-32 cursor-pointer truncate bg-surface-850 px-2 py-1 text-slate-200 hover:text-brand">
@@ -79,8 +112,9 @@ export function RpsHeatmap({ onSelectSector }: {
                       const v = (cols[d] ?? []).find(([m]) => m === name)?.[1]
                       const pct = typeof v === 'number' ? v * 100 : null
                       return (
-                        <td key={d} title={pct === null ? undefined : `${d} · ${name} · ${pct.toFixed(2)}%`}
-                          className="px-1 py-1 text-center tabular-nums text-slate-200"
+                        <td key={d} title={pct === null ? undefined : `${d} · ${name} · ${pct.toFixed(2)}%（点击查看逐日轨迹）`}
+                          onClick={() => setTrack(track === name ? null : name)}
+                          className="cursor-pointer px-1 py-1 text-center tabular-nums text-slate-200 hover:outline hover:outline-1 hover:outline-brand/50"
                           style={{ backgroundColor: cellColor(pct) }}>
                           {pct === null ? '·' : pct.toFixed(1)}
                         </td>
@@ -90,10 +124,34 @@ export function RpsHeatmap({ onSelectSector }: {
                       {avg === null ? '·' : (avg * 100).toFixed(1)}
                     </td>
                   </tr>
+                  {track === name && (
+                    <tr className="border-t border-brand/30 bg-brand/10">
+                      <td className="sticky left-0 bg-brand/10 px-2 py-1 text-[10px] text-brand">轨迹</td>
+                      {dates.map((d) => {
+                        const day = cols[d] ?? []
+                        const idx = day.findIndex(([m]) => m === name)
+                        const v = idx >= 0 ? day[idx][1] : null
+                        return (
+                          <td key={d} className="px-1 py-1 text-center tabular-nums text-brand/90">
+                            {idx >= 0 && v !== null ? `${idx + 1}·${(v * 100).toFixed(1)}` : '·'}
+                          </td>
+                        )
+                      })}
+                      <td className="px-2 py-1 text-center text-brand/70">排名·涨幅</td>
+                    </tr>
+                  )}
+                  </Fragment>
                 )
               })}
             </tbody>
           </table>
+          {(analysis || analysisErr) && (
+            <div className="mt-3 rounded-lg border border-brand/30 bg-brand/5 p-3 text-[11px] leading-relaxed text-slate-200">
+              <div className="mb-1 text-[10px] font-medium text-brand">AI 轮动研判</div>
+              {analysisErr ? <span className="text-rose-300">{analysisErr}</span>
+                : <span className="whitespace-pre-wrap">{analysis}</span>}
+            </div>
+          )}
           <p className="mt-2 text-[10px] text-slate-600">
             格值=板块当日平均涨幅（%），红涨绿降、色深随幅度；行按最新一日涨幅取前 {TOP_N}。
             与"近7日轮动记录"（按涨停梯队排名）互补：看梯队用那个，看涨幅持续性看这个。

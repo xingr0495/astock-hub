@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, QUICK_SOURCES, SOURCE_LABELS } from '../lib/api'
 import { usePolling } from '../lib/queryKeys'
 import { useAuth } from '../auth'
+import { toast } from '../components/Toast'
 
 /** 一键刷新数据：启动后台刷新任务并轮询进度。仅管理员可见（/api/refresh 为 admin 级端点）。 */
 export default function RefreshButton() {
@@ -37,7 +38,7 @@ export default function RefreshButton() {
             setKick((k) => k + 1)
           } catch (e) {
             setBusy(false)
-            alert(e instanceof Error ? e.message : String(e))
+            toast(e instanceof Error ? e.message : String(e))
           }
         }}
         className="rounded-lg border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs text-brand transition-colors hover:bg-brand/20 disabled:opacity-50"

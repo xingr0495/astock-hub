@@ -22,10 +22,32 @@ def test_owner_session_has_no_login_wall():
 
 def test_removed_pool_and_trading_routes_are_not_exposed():
     paths = {route.path for route in app.routes if hasattr(route, "path")}
-    assert not any(path.startswith("/api/tq") for path in paths)
-    assert not any(path.startswith("/api/local-docs") for path in paths)
+    for prefix in ("/api/tq", "/api/gm", "/api/local-docs", "/api/license/",
+                   "/api/digest-pool", "/api/manual-flags", "/api/kph-",
+                   "/api/zsxq/digest", "/api/zsxq/week", "/api/zsxq/report",
+                   "/api/pool/"):
+        assert not any(path.startswith(prefix) for path in paths), prefix
     response = client.get("/api/pool/topics")
     assert response.status_code == 404
+
+
+def test_public_frontend_has_no_private_or_strategy_api_calls():
+    forbidden = ("/api/tq", "/api/gm", "/api/paper", "/api/backtest",
+                 "/api/digest-pool", "/api/manual-flags", "/api/local-docs",
+                 "/api/kph-", "/api/license/", "/api/pool/")
+    for relative in ("frontend/src/lib/api.ts",
+                     "frontend/src/components/dashboard/WatchBar.tsx"):
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        for endpoint in forbidden:
+            assert endpoint not in text, f"{relative}: {endpoint}"
+
+
+def test_optional_public_adapters_import_without_removed_modules():
+    from astock_hub.adapters.zsxq import ZsxqAdapter
+    from astock_hub.chat.context import _norm
+
+    assert _norm(" Ａ ") == "A"
+    assert "zsxq_output" in str(ZsxqAdapter({}).output_dir)
 
 
 def test_strategy_catalog_imports_with_declared_dependencies():
@@ -52,3 +74,15 @@ def test_public_config_has_no_machine_specific_paths_or_secrets():
     text = (ROOT / "config.example.toml").read_text(encoding="utf-8")
     assert not re.search(r"(?<![A-Za-z0-9_])[A-Za-z]:[\\/]", text)
     assert "TDX-" not in text
+
+
+def test_public_sources_have_no_machine_specific_paths():
+    files = (
+        "astock_hub/adapters/zsxq.py", "astock_hub/adapters/national_team.py",
+        "astock_hub/adapters/investment_news.py", "astock_hub/mcp_server.py",
+        "astock_hub/adapters/tickflow_cloud.py", "astock_hub/serenity.py",
+        "astock_hub/market/strategies/group_doc1.py", "scripts/restart-panel.ps1",
+    )
+    for relative in files:
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        assert not re.search(r"(?<![A-Za-z0-9_])[A-Za-z]:[\\/]", text), relative

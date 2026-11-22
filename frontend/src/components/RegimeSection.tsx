@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import ReactECharts from 'echarts-for-react'
+import ReactECharts from './ThemedECharts'
 import { api } from '../lib/api'
+import { useChartTheme } from '../lib/theme'
 
 const STATE_COLOR: Record<string, string> = {
   strong: '#f43f5e',
@@ -24,6 +25,7 @@ const PHASE_LABEL: Record<string, string> = {
  * 本地计算（同花顺全市场日线），不依赖 tickflow 服务。
  */
 export default function RegimeSection() {
+  const ct = useChartTheme()
   const query = useQuery({
     queryKey: ['regime', 60],
     queryFn: () => api.regime(60),
@@ -57,7 +59,7 @@ export default function RegimeSection() {
         radius: '92%',
         center: ['50%', '62%'],
         progress: { show: true, width: 10, itemStyle: { color: stateColor } },
-        axisLine: { lineStyle: { width: 10, color: [[1, '#1e293b']] } },
+        axisLine: { lineStyle: { width: 10, color: [[1, ct.grid]] } },
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: { show: false },
@@ -68,7 +70,7 @@ export default function RegimeSection() {
           offsetCenter: [0, '-10%'],
           formatter: () => `{a|${latest.score}}\n{b|${snap.state_label}}`,
           rich: {
-            a: { fontSize: 30, fontWeight: 'bold', color: '#f1f5f9', lineHeight: 38 },
+            a: { fontSize: 30, fontWeight: 'bold', color: ct.name === 'light' ? ct.textStrong : '#f1f5f9', lineHeight: 38 },
             b: { fontSize: 12, color: stateColor, lineHeight: 20 },
           },
         },

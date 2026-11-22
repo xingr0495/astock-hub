@@ -1,17 +1,18 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { AuthProvider, useAuth } from './auth'
 import Layout from './components/Layout'
 import StockAnalysis from './pages/StockAnalysis'
 import Dashboard from './pages/Dashboard'
-import StrategyScreen from './pages/StrategyScreen'
-import NewsPage from './pages/NewsPage'
-import SectorAnalysis from './pages/SectorAnalysis'
+import MarketOverview from './pages/MarketOverview'
+const StrategyScreen = lazy(() => import('./pages/StrategyScreen'))
+const NewsPage = lazy(() => import('./pages/NewsPage'))
+const SectorAnalysis = lazy(() => import('./pages/SectorAnalysis'))
 import WatchlistPage from './pages/WatchlistPage'
-import ReviewPage from './pages/ReviewPage'
-import NotifyPage from './pages/NotifyPage'
-import DataSourcesPage from './pages/DataSourcesPage'
-import LlmSettingsPage from './pages/LlmSettingsPage'
+const ReviewPage = lazy(() => import('./pages/ReviewPage'))
+const NotifyPage = lazy(() => import('./pages/NotifyPage'))
+const DataSourcesPage = lazy(() => import('./pages/DataSourcesPage'))
+const LlmSettingsPage = lazy(() => import('./pages/LlmSettingsPage'))
 
 function Spinner() {
   return (
@@ -26,8 +27,8 @@ function Spinner() {
 //   perm="watchlist"  —— 普通权限键：管理员直通，普通用户须 perms[perm] 为真；
 //   无 perm           —— view_market 默认档路由（/dashboard /screen 等），
 //                        前端不拦（默认开），后端中间件兜底。
-function Require({ perm, feature, children }: {
-  perm?: string; feature?: string; children: ReactNode
+function Require({ perm, feature, featureAny, children }: {
+  perm?: string; feature?: string; featureAny?: string[]; children: ReactNode
 }) {
   const { can, isAdmin, features } = useAuth()
   const needAdmin = perm === '__admin__'
@@ -35,6 +36,8 @@ function Require({ perm, feature, children }: {
   if (perm && !needAdmin && !isAdmin && !can(perm)) return <Navigate to="/" replace />
   // 功能开关（如云端 tq=false 隐藏交易页）：无条件重定向，管理员也不例外
   if (feature && !features[feature]) return <Navigate to="/" replace />
+  // 多通道任一开启即可（交易栏目=掘金或通达信任一）
+  if (featureAny && !featureAny.some((f) => features[f])) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -43,11 +46,15 @@ function Root() {
   if (loading) return <Spinner />
   if (!user) return <div className="p-8 text-center text-sm text-slate-400">后端未连接，请确认面板服务已启动</div>
   return (
+    <Suspense fallback={<Spinner />}>
     <Routes>
+      <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="/register" element={<Navigate to="/" replace />} />
       <Route element={<Layout />}>
         <Route index element={<StockAnalysis />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/market" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/market-overview" element={<MarketOverview />} />
         <Route path="/sector" element={<SectorAnalysis />} />
         <Route path="/watchlist" element={<Require perm="watchlist"><WatchlistPage /></Require>} />
         <Route path="/review" element={<Require perm="view_review"><ReviewPage /></Require>} />
@@ -59,6 +66,7 @@ function Root() {
         <Route path="*" element={<StockAnalysis />} />
       </Route>
     </Routes>
+    </Suspense>
   )
 }
 

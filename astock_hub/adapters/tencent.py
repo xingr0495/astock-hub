@@ -41,6 +41,12 @@ def _f(v: str) -> float | None:
         return None
 
 
+def _depth(v: str) -> float | None:
+    """五档专用：0/空 一律 None（盘后腾讯把五档清零，显示—而不是 0.00 误导）。"""
+    val = _f(v)
+    return val if val else None
+
+
 class TencentAdapter(Adapter):
     name = "tencent"
     source = "tencent-http"
@@ -111,6 +117,41 @@ class TencentAdapter(Adapter):
         except (httpx.TimeoutException, httpx.HTTPStatusError) as e:
             return self.fail(errors.TIMEOUT, f"腾讯行情请求失败：{e}",
                              "稍后重试", retryable=True, endpoint=self.base)
+
+    def quote_depth(self, thscode: str) -> dict:
+        """单票快照 + 买卖五档（掘金/下单卡行情条用，2026-11-20）。
+
+        返回扁平 dict（name/price/prev_close/change_pct/bids/asks/bid_vols/ask_vols/
+        limit_up_price/limit_down_price/time），五档量单位为**手**。
+        网络/解析异常直接抛出，由调用方结构化降级（不静默造数）。
+        字段位置（qt.gtimg.cn 实测）：[9,11,13,15,17]=买1-5价 [10..18]=买量，
+        [19,21,23,25,27]=卖1-5价 [20..28]=卖量。
+        """
+        with httpx.Client(timeout=httpx.Timeout(6.0, connect=3.0)) as client:
+            resp = client.get(self.base + _market_prefix(thscode),
+                              headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                                    "AppleWebKit/537.36 (KHTML, like Gecko)"})
+            resp.raise_for_status()
+            text = resp.content.decode("gbk", errors="replace")
+        line = next((ln for ln in text.splitlines() if "=" in ln), "")
+        body = line.partition("=")[2].strip().strip(";").strip().strip('"')
+        f = body.split("~")
+        if len(f) < 48:
+            raise ValueError(f"腾讯快照字段不足（{thscode}）：可能不是有效 A 股代码")
+        return {
+            "code": thscode,
+            "name": f[1].strip(),
+            "price": _f(f[3]),
+            "prev_close": _f(f[4]),
+            "change_pct": _f(f[32]),
+            "bids": [_depth(f[i]) for i in (9, 11, 13, 15, 17)],
+            "bid_vols": [_depth(f[i]) for i in (10, 12, 14, 16, 18)],
+            "asks": [_depth(f[i]) for i in (19, 21, 23, 25, 27)],
+            "ask_vols": [_depth(f[i]) for i in (20, 22, 24, 26, 28)],
+            "limit_up_price": _f(f[47]),
+            "limit_down_price": _f(f[48]),
+            "time": f[30].strip(),
+        }
 
     def snapshot_chunked(self, thscodes: list[str], *, chunk_size: int = 60,
                          max_workers: int = 8, retries: int = 1

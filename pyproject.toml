@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "astock-hub"
 version = "0.3.0"
-description = "可自托管的 A 股数据聚合与 AI 研究面板（系统显示名称：Mind AShare）"
+description = "A股五维数据聚合层：统一 CLI/MCP 查询 tickflow / 国家队 / DSA / zsxq / hithink-finance"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",

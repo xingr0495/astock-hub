@@ -47,17 +47,6 @@ def _pct(x) -> str:
     return "—" if x is None else f"{x}%"
 
 
-# 参考注释只保留关键读数（全量塞进推送太长）
-_REF_KEEP = {"cls.emotion": "财联社情绪", "cls.limit_up_pool": "财联社涨停池",
-             "kph.market_emotion": "开盘红涨停", "kph.review_events": "开盘红复盘",
-             "kph.daily_emotion": "开盘红历史情绪", "kph.daily_zdt": "开盘红实际涨跌停"}
-
-
-def _ref_compact(ref: dict) -> str:
-    items = [f"{_REF_KEEP.get(k, k)} {v}" for k, v in ref.items() if k in _REF_KEEP]
-    return "；".join(items)
-
-
 # 明日跟踪点：三信号未确认项的盯盘清单 + 当前模式的切换条件
 _TRIAD_WATCH = {
     "① 相对收益反转": "相对收益：盯中证1000/沪深300 比值 MA5 与 MA20 是否交叉",
@@ -175,9 +164,8 @@ def format_daily_review(data: dict) -> str:
         lines.append(f"    • 昨涨停今表现：均值 {_pct(y.get('avg_pct'))} / 中位 "
                      f"{_pct(y.get('median_pct'))} / 红盘 {y.get('red_rate')}"
                      f"（{y.get('n')} 只）；高位股均值 {_pct(y.get('high_avg_pct'))}")
-        ref = fw.get("reference_src") or {}
-        if ref:
-            lines.append(f"    • 参考注释（不参与判定）：{_ref_compact(ref)}")
+        # 2026-11-20 用户拍板"飞书不显示数据来源"：参考注释行（财联社/开盘红
+        # 等品牌字样）与末尾"数据来源"脚注一并移除，与面板版口径一致。
         lines.append("")
 
     # === 指数结构 ===
@@ -251,7 +239,6 @@ def format_daily_review(data: dict) -> str:
             lines.append(h("明日跟踪点"))
             for w in watch:
                 lines.append(f"    👀 {w}")
-    lines.append(f"\n数据来源：a-stock-data + hithink + 择时框架(v1) | {as_of}")
     return "\n".join(lines)
 
 

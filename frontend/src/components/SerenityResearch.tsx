@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import type { SerenityJob, SerenityReport } from '../lib/types'
+import { toast } from '../components/Toast'
 
 const STRENGTH_CLS: Record<string, string> = {
   强: 'bg-emerald-500/15 text-emerald-300',
@@ -53,7 +54,7 @@ export function useSerenityJob(code: string): SerenityState {
       await api.serenityAnalyze(code)
       await qc.invalidateQueries({ queryKey: ['serenityJob', code] })
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e))
+      toast(e instanceof Error ? e.message : String(e))
     } finally {
       setStarting(false)
     }

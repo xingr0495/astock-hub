@@ -246,14 +246,20 @@ def compute_limit_signals(df: pl.DataFrame, *, name: str | None = None) -> pl.Da
         raise ValueError(f"compute_limit_signals 缺少列: {sorted(missing)}")
 
     # 前一日参考收盘价（交易所涨跌停基准价）：仅当复权因子发生变化（除权除息）
-    # 时用前复权昨收，否则用原始昨收，以避免浮点精度误差。
+    # 时用**除权参考价**（close.shift / 当日复权因子），否则用原始昨收。
+    #
+    # 除权参考价 = 后复权昨收 ÷ 当日复权因子 = close.shift / adj_today：
+    # close.shift = 原始昨收 × factor_prev，除以 factor_today 即还原为
+    # 「除息前收盘 − 分红」（调低），与交易所 pre_close 一致。
+    # 此前误用 close.shift（后复权价，被**调高**）作基准价——方向相反，
+    # 小分红除息日把正常价格误判为跌停（2026-11-20 六只除权股误判 → 对账 FAIL）。
     _adj_today = pl.col("close") / pl.col("raw_close")
     _adj_yesterday = pl.col("close").shift(1).over("symbol") / pl.col("raw_close").shift(1).over("symbol")
     _adj_changed = (_adj_today - _adj_yesterday).abs() > 1e-6
     df = df.with_columns(
         pl.when(_adj_changed)
-        .then(pl.col("close").shift(1).over("symbol"))          # 除权日：前复权昨收
-        .otherwise(pl.col("raw_close").shift(1).over("symbol"))  # 平常：原始昨收
+        .then(pl.col("close").shift(1).over("symbol") / _adj_today)  # 除权日：除权参考价
+        .otherwise(pl.col("raw_close").shift(1).over("symbol"))       # 平常：原始昨收
         .alias("_prev_raw_close")
     )
 

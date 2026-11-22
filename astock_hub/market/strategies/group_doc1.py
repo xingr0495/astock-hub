@@ -240,7 +240,7 @@ STRATEGIES = [ice_repair, divergence_pick]
 # 会引入前视（周内哪天都不知道本周五的结果）。因此这里只允许用
 # **信号日之前最近一个完整周** 的净申购，且必须早于信号日。
 #
-# 数据：由 national_team 配置指定的 national_team_position.json
+# 数据：data/national_team_position.json
 #   （6 个宽基 ETF 份额，2024-01 起周频，144 周）
 
 

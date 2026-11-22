@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { TA_REPORT_LABELS, type TaResult } from '../lib/types'
+import { toast } from '../components/Toast'
 
 const DECISION_META: Record<string, { label: string; cls: string }> = {
   buy: { label: 'BUY 买入', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/40' },
@@ -41,7 +42,7 @@ export default function TaDeepAnalysis({ code }: { code: string }) {
       await api.taAnalyze(code)
       setKick((k) => k + 1)
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e))
+      toast(e instanceof Error ? e.message : String(e))
     } finally {
       setStarting(false)
     }

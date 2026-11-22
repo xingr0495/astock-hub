@@ -1,10 +1,17 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>astock-hub · Mind AShare</title>
-    <meta name="description" content="可自托管的 A 股数据聚合与 AI 研究面板；Mind AShare 为系统显示名称。" />
+    <script>
+      try {
+        document.documentElement.classList.toggle('dark', localStorage.getItem('ah-theme') !== 'light')
+      } catch (_) {
+        document.documentElement.classList.add('dark')
+      }
+    </script>
+    <title>Mind AShare · A股五维投研面板</title>
+    <meta name="description" content="Mind-Astock: Your AI Co-Pilot for A-Share Alpha" />
     <link rel="icon" type="image/png" href="/mind-ashare-logo.png" />
   </head>
   <body class="bg-surface-900">

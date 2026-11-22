@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import ReactECharts from 'echarts-for-react'
+import ReactECharts from '../ThemedECharts'
 import { Globe, RefreshCw } from 'lucide-react'
 
 import { api } from '../../lib/api'
 import { fmtBigNum } from './format'
 import { Modal } from '../Modal'
+import { useChartTheme } from '../../lib/theme'
 
 type QuoteItem = {
   symbol: string
@@ -56,6 +57,7 @@ function IntradayLine({ points, prevClose }: {
   points: { t: string; price: number }[]
   prevClose?: number | null
 }) {
+  const ct = useChartTheme()
   const last = points[points.length - 1]?.price
   const up = prevClose == null || last == null ? true : last >= prevClose
   const color = up ? '#f43f5e' : '#10b981'
@@ -94,8 +96,8 @@ function IntradayLine({ points, prevClose }: {
         markLine: prevClose
           ? {
               symbol: 'none',
-              label: { formatter: `昨收 ${prevClose}`, color: '#94a3b8', fontSize: 10 },
-              lineStyle: { color: '#64748b', type: 'dashed', width: 1 },
+              label: { formatter: `昨收 ${prevClose}`, color: ct.name === 'light' ? ct.text : '#94a3b8', fontSize: 10 },
+              lineStyle: { color: ct.name === 'light' ? ct.border : '#64748b', type: 'dashed', width: 1 },
               data: [{ yAxis: prevClose }],
             }
           : undefined,

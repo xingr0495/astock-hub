@@ -183,3 +183,26 @@ def monitor_summary(days: int = 10) -> dict:
         } if last_week else None),
         "note": note,
     }
+
+
+def nt_accumulation(days: int = 5) -> dict:
+    """近 N 个交易日宽基 ETF 净申购（亿份）——冷市独立买入信号（用户拍板 2026-11-18）。
+
+    数据为 T 日份额次日发布，最近一日可能是空窗（返回里带 latest_date）。
+    increasing=True 表示窗口内累计净申购为正（国家队在增持）。
+    """
+    real = _load_daily_real()
+    if real.empty:
+        return {"increasing": None, "reason": "日频数据缺失（未回填）"}
+    tail = real.tail(days)
+    net = float(tail["单日变化_亿份"].sum())
+    last_date = str(tail["date"].iloc[-1])
+    last_delta = float(tail["单日变化_亿份"].iloc[-1])
+    return {
+        "increasing": net > 0,
+        "net": round(net, 1),
+        "days": int(len(tail)),
+        "latest": last_delta,
+        "latest_date": last_date,
+        "note": f"近{len(tail)}交易日累计净申购 {net:+.1f} 亿份（{last_date} 当日 {last_delta:+.1f}）",
+    }

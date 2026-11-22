@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import ReactECharts from 'echarts-for-react'
+import ReactECharts from './ThemedECharts'
 import type { KlineRow } from '../lib/types'
 
 const UP = '#f43f5e' // A股惯例：红涨

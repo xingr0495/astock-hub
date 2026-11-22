@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react'
+import ReactECharts from './ThemedECharts'
 
 // 配色与 KlineChart 严格一致（A股惯例：红涨绿跌）
 const UP = '#f43f5e'

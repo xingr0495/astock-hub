@@ -358,7 +358,7 @@ def _generate_review_content(data: dict, focus: str = "") -> tuple[str, str]:
             content += "\n### 九、明日关注\n\n"
             for w in watch:
                 content += f"- 👀 {w}\n"
-    content += f"\n> 数据来源：a-stock-data + hithink + 择时框架(v1) | {as_of}\n"
+    content += "\n"
 
     # 生成摘要
     mode_txt = f"，模式：{fw.get('mode')}" if fw else ""

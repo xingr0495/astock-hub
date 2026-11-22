@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import ReactECharts from "echarts-for-react"
+import ReactECharts from "../ThemedECharts"
 
 import { api } from "../../lib/api"
 import type { Envelope } from "../../lib/types"

@@ -212,8 +212,8 @@ def _zsxq_dimension(cfg: dict, sym: SymbolInfo, name: str | None,
     try:
         from ..adapters.local_docs import LocalDocsAdapter
         local_search = LocalDocsAdapter(cfg, user=user, is_admin=is_admin).search(
-            keyword, days=30, max_hits=4)
-    except ImportError:  # 当前仓库不包含本地资料模块
+            keyword, days=7, max_hits=4)
+    except ImportError:
         local_search = None
     legs = [search, latest, news_search, news_latest]
     if local_search is not None:
@@ -243,7 +243,7 @@ def _zsxq_dimension(cfg: dict, sym: SymbolInfo, name: str | None,
         "news_today": news_latest.to_dict(),
         "news_related": news_related,
         "local_docs_mentions": (local_search.to_dict() if local_search is not None else {
-            "status": "not_applicable", "data": {"hits": [], "note": "当前仓库未包含本地资料模块"}}),
+            "status": "not_applicable", "data": {"hits": [], "note": "免费版未包含本地资料模块"}}),
         "note": "信息面：" + " + ".join(parts),
     }
     if not name:

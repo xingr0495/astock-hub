@@ -222,7 +222,8 @@ def send_alert_detailed(day: str, chain: str, content: str, *, kind: str = "fail
     真实状态目录上触发心跳也永远发不出去。
     """
     if chain not in CHAINS and chain not in ("test", "data-src",
-                                             "paper-engine", "minute-store"):
+                                             "paper-engine", "minute-store",
+                                             "data-check"):
         return False, f"未知链名 {chain}（告警只认 {', '.join(CHAINS)}），不发送"
     n = cfg if cfg is not None else _alert_cfg()
     reason = _gate_reason(n)

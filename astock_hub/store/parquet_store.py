@@ -118,6 +118,21 @@ def _tdx_proto_fetch(day: str):
     return tdx_full_market_day(day)
 
 
+def _refresh_qfq_quiet(cfg: dict) -> dict:
+    """提前返回分支的 qfq 补跑：失败只警告不阻断 raw 同步返回。
+
+    sync_store 的"已是最新/无新数据"分支此前直接 return，raw 一旦写入当日，
+    qfq 断更就永远没人补（2026-11-19 假跌停事故）。这里统一补跑并容忍失败；
+    refresh_qfq_daily 内部幂等（qfq 已最新则秒回，断更则补跑）。
+    """
+    try:
+        from .qfq_refresh import refresh_qfq_daily
+        return refresh_qfq_daily(cfg)
+    except Exception as e:  # noqa: BLE001 — qfq 失败不阻断 raw 同步
+        logger.warning("qfq 补跑失败（raw 同步已就绪）: %s", e)
+        return {"ok": False, "error": str(e)[:200]}
+
+
 def sync_store(cfg: dict) -> dict:
     """增量同步：使用通达信盘后包获取新交易日数据。"""
     store = _store_dir(cfg)
@@ -139,8 +154,11 @@ def sync_store(cfg: dict) -> dict:
     end_date = datetime.now().date()
 
     if start_date.date() > end_date:
+        # raw 已最新，但 qfq 可能断更（refresh_qfq_daily 此前崩溃未补，2026-11-19
+        # 事故）——提前返回前也必须补跑；其内部幂等（qfq 已最新则秒回，断更则补）。
+        # 失败容忍：qfq 补跑失败不阻断 raw 同步的"已最新"返回。
         return {"ok": True, "message": "已是最新", "last_date": last_date,
-                "source": "无新数据"}
+                "source": "无新数据", "qfq": _refresh_qfq_quiet(cfg)}
 
     from ..adapters.tdx_protocol import protocol_eligible
 
@@ -174,7 +192,7 @@ def sync_store(cfg: dict) -> dict:
 
     if not all_rows:
         return {"ok": True, "message": "无新数据", "last_date": last_date,
-                "source": "无新数据"}
+                "source": "无新数据", "qfq": _refresh_qfq_quiet(cfg)}
 
     # 合并并写入缓存
     new_df = pl.DataFrame(all_rows)
@@ -302,24 +320,32 @@ def read_market(store_dir: Path, start: str, end: str,
     # 回落 raw（保守回落好过 null 断链）。
     qfq_file = store_dir / "kline_daily" / "_all.parquet"
     if qfq_file.exists():
-        qfq = pl.read_parquet(qfq_file)
-        qfq = _filter_date(qfq, start_date, end_date)
-        if "thscode" in qfq.columns and "symbol" not in qfq.columns:
-            qfq = qfq.rename({"thscode": "symbol"})
-        if not qfq.is_empty():
-            qfq = qfq.select(["symbol", "date", "open", "high", "low", "close"])
-            result = raw.join(qfq, on=["symbol", "date"], how="left")
-            result = result.with_columns([
-                pl.coalesce(["open", "raw_open"]).alias("open"),
-                pl.coalesce(["high", "raw_high"]).alias("high"),
-                pl.coalesce(["low", "raw_low"]).alias("low"),
-                pl.coalesce(["close", "raw_close"]).alias("close"),
-            ]).select(["symbol", "date", "open", "high", "low", "close",
-                      "volume", "amount", "raw_open", "raw_high",
-                      "raw_low", "raw_close"])
-            return result
+        qfq_all = pl.read_parquet(qfq_file)
+        # qfq 断更检测：请求 end 超出 qfq 覆盖（如 refresh_qfq_daily 失败，
+        # raw 已到 11-19、qfq 停在 11-18）时，raw 为基 left join 会让 close 列
+        # 前一天复权、后一天原始——compute_limit_signals 把复权因子突变误判为
+        # 除权，用前复权昨收判涨跌停 → 全市场假跌停（2026-11-19 对账 FAIL）。
+        # 此时整段降级为统一原始价（交易所口径），qfq 补回后自动恢复复权。
+        qfq_last = qfq_all["date"].max()
+        if qfq_last is not None and qfq_last >= end_date:
+            qfq = _filter_date(qfq_all, start_date, end_date)
+            if "thscode" in qfq.columns and "symbol" not in qfq.columns:
+                qfq = qfq.rename({"thscode": "symbol"})
+            if not qfq.is_empty():
+                qfq = qfq.select(["symbol", "date", "open", "high", "low", "close"])
+                result = raw.join(qfq, on=["symbol", "date"], how="left")
+                result = result.with_columns([
+                    pl.coalesce(["open", "raw_open"]).alias("open"),
+                    pl.coalesce(["high", "raw_high"]).alias("high"),
+                    pl.coalesce(["low", "raw_low"]).alias("low"),
+                    pl.coalesce(["close", "raw_close"]).alias("close"),
+                ]).select(["symbol", "date", "open", "high", "low", "close",
+                          "volume", "amount", "raw_open", "raw_high",
+                          "raw_low", "raw_close"])
+                return result
 
-    # 无 qfq 文件：close==raw_close（qfq 缺失降级，2026-11-12 前的旧行为）
+    # 无 qfq 文件 / qfq 断更未覆盖请求 end：close==raw_close（统一原始价，
+    # 交易所口径——涨跌停判定本就不该用复权价；qfq 缺失降级，2026-11-12 前旧行为）
     result = raw.rename({
         "raw_open": "open", "raw_high": "high",
         "raw_low": "low", "raw_close": "close"

@@ -70,51 +70,6 @@ export const postJson = <T,>(path: string, body: unknown) =>
 export const deleteJson = <T,>(path: string) =>
   sendJson<T>('DELETE', path)
 
-// ==================== 星球纪要汇总 ====================
-
-export interface ZsxqDayStatus {
-  date: string
-  weekday: string
-  is_today: boolean
-  has_topics: boolean
-  topic_count: number | null
-  has_report: boolean
-  report_path: string | null
-  state: 'ok' | 'raw_only' | 'missing'
-}
-
-export type ZsxqStepState = 'pending' | 'running' | 'ok' | 'skip' | 'fail'
-
-export interface ZsxqDigestDay {
-  date: string
-  weekday: string
-  fetch: ZsxqStepState
-  summarize: ZsxqStepState
-  note: string
-}
-
-export interface ZsxqDigestStatus {
-  running: boolean
-  started_at: string | null
-  finished_at: string | null
-  error: string | null
-  days: ZsxqDigestDay[]
-  progress: { done: number; total: number; summarized: number }
-}
-
-// ---- 本地资料（产业资讯页"本地资料"面板） ----
-
-export interface LocalDoc {
-  doc_id: string
-  name: string
-  ext: string
-  upload_date: string
-  chars: number
-  status: 'summarizing' | 'ready' | 'summary_failed' | 'extract_failed'
-  error?: string | null
-  summary_preview?: string | null
-}
-
 /** 把字符串参数安全拼进查询串 */
 export function qs(obj: Record<string, string | number | undefined>): string {
   const parts = Object.entries(obj)
@@ -295,15 +250,6 @@ export const api = {
   mainline: (days = 30, refresh = false, realtime = false) =>
     getJson<Envelope>(`/api/mainline${qs({ days, refresh, realtime })}`),
 
-  kphEvents: (date?: string, limit = 60) =>
-    getJson<Envelope>(`/api/kph-events${qs({ date, limit })}`),
-
-  kphLive: (date?: string) =>
-    getJson<Envelope>(`/api/kph-live${date ? qs({ date }) : ''}`),
-
-  manualFlags: (code: string) =>
-    getJson<Envelope>(`/api/manual-flags/${encodeURIComponent(code)}`),
-
   rps: (days = 12, refresh = false) =>
     getJson<Envelope>(`/api/rps${qs({ days, refresh })}`),
 
@@ -324,53 +270,6 @@ export const api = {
     ),
 
   zsxqLatest: () => getJson<Envelope>('/api/zsxq-latest'),
-
-  // 星球纪要汇总（产业资讯页"星球纪要"面板）
-  zsxqWeek: (days = 7) =>
-    getJson<{ ok: boolean; error?: string; summary?: string; output_dir?: string; days: ZsxqDayStatus[] }>(
-      `/api/zsxq/week${qs({ days })}`),
-
-  zsxqReport: (date: string) =>
-    getJson<{ ok: boolean; date: string; path?: string; content?: string; chars?: number; error?: string }>(
-      `/api/zsxq/report${qs({ date })}`),
-
-  zsxqDigestStart: (days = 7, force = false, date?: string) =>
-    postJson<{ ok: boolean; running?: boolean; already_running?: boolean; error?: string }>(
-      '/api/zsxq/digest', { days, force, date: date || undefined }),
-
-  zsxqDigestStatus: () =>
-    getJson<ZsxqDigestStatus>('/api/zsxq/digest/status'),
-
-  localDocs: () => getJson<{ docs: LocalDoc[] }>('/api/local-docs'),
-
-  localDocDetail: (id: string) =>
-    getJson<{ doc: LocalDoc; summary: string | null }>(`/api/local-docs/${id}`),
-
-  uploadLocalDocs: async (files: File[]) => {
-    const fd = new FormData()
-    files.forEach((f) => fd.append('files', f))
-    const res = await fetch('/api/local-docs', { method: 'POST', body: fd })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data?.error ?? `上传失败 ${res.status}`)
-    return data as { saved: LocalDoc[]; rejected: { name: string; reason: string }[] }
-  },
-
-  deleteLocalDoc: (id: string) => sendJson<{ ok: boolean }>('DELETE', `/api/local-docs/${id}`),
-
-  localDocRawUrl: (id: string) => `/api/local-docs/${id}/raw`,
-
-  // 纪要股票池（每日纪要重点个股自动累计）
-  digestPool: () =>
-    getJson<{ stocks: any[]; total: number; unmatched: any[] }>('/api/digest-pool'),
-
-  digestPoolRebuild: (opts: { date?: string; days?: number }) =>
-    postJson<any>('/api/digest-pool/rebuild', opts),
-
-  digestPoolRemove: (symbol: string) =>
-    sendJson<any>('DELETE', `/api/digest-pool/${symbol}`),
-
-  digestPoolPush: (symbols: string[]) =>
-    postJson<any>('/api/digest-pool/push', { symbols }),
 
   // 自选股（服务端存储，跨设备同步；写操作均返回最新全量 {items, groups}）
   watchlist: () =>
@@ -396,14 +295,6 @@ export const api = {
 
   news: (industry?: string) =>
     getJson<Envelope>(`/api/news${qs({ industry })}`),
-
-  poolTopics: () =>
-    getJson<{ data: { preset: string[]; mainline: string[]; as_of: string | null } }>(
-      '/api/pool/topics',
-    ),
-
-  poolAnalyze: (topic: string, max = 80) =>
-    getJson<Envelope>(`/api/pool/analyze${qs({ topic, max })}`),
 
   limitPools: () => getJson<Envelope>('/api/market/limit-pools'),
 

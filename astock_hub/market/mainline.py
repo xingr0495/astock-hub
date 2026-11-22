@@ -37,7 +37,17 @@ _SCORE_WEIGHTS = {
     "ge2_count": 0.15,
 }
 
-DEFAULT_FILTER = {"min_members": 4, "max_members": 600, "blacklist": set()}
+# 属性/状态桶不是真行业主线（对齐 TSP sector_rotation 排除口径）：
+# 融资融券、沪深股通、昨日涨停、次新、ST、预盈预增、高送转、壳资源等一律不参与排名。
+ATTRIBUTE_SECTOR_BLACKLIST = {
+    "融资融券", "沪深股通", "昨日涨停", "次新股", "新股", "ST板块", "ST股",
+    "预盈预增", "预亏预减", "扭亏为盈", "高送转", "壳资源", "摘帽", "破净股",
+    "低价股", "微盘股", "大盘股", "中盘股", "小盘股", "绩优股", "亏损股",
+    "减持股", "增持股", "回购股", "退市风险", "退市整理", "停牌股",
+}
+
+DEFAULT_FILTER = {"min_members": 4, "max_members": 600,
+                  "blacklist": ATTRIBUTE_SECTOR_BLACKLIST}
 
 
 def mainline_path(data_dir: Path) -> Path:

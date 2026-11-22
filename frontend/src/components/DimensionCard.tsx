@@ -37,7 +37,6 @@ export default function DimensionCard({
           {meta?.as_of && (
             <div className="text-[11px] text-slate-500">数据时间 {meta.as_of}</div>
           )}
-          <div className="text-[11px] text-slate-600">{dim?.source ?? '—'}</div>
         </div>
       </header>
 

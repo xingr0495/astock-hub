@@ -18,7 +18,7 @@ from . import errors, models
 from .adapters.base import timed
 try:
     from .zsxq_fetch import fetch_topics, resolve_output_dir
-except ImportError:  # 当前仓库不包含纪要抓取，只保留用户自有报告的读取插槽
+except ImportError:
     fetch_topics = resolve_output_dir = None
 
 QUICK_SOURCES = ["etf", "tdx_daily", "news"]
@@ -114,7 +114,7 @@ def refresh_zsxq(cfg: dict, force: bool = False, day: str | None = None) -> mode
     """
     if resolve_output_dir is None:
         return _result("refresh-zsxq", False, None, None,
-                       "当前仓库未包含纪要抓取与 AI 汇总模块", ok=False)
+                       "免费版未包含纪要抓取与 AI 汇总模块", ok=False)
     zx_cfg = cfg.get("zsxq", {})
     group_id = zx_cfg.get("group_id", "15552822451452")
     output_dir = resolve_output_dir(zx_cfg)

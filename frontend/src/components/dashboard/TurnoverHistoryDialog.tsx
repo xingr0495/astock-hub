@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import ReactECharts from 'echarts-for-react'
+import ReactECharts from '../ThemedECharts'
 
 import { api } from '../../lib/api'
 import { fmtBigNum } from './format'
 import { Modal } from '../Modal'
+import { useChartTheme } from '../../lib/theme'
 
 type Point = { date: string; total: number; count?: number }
 
@@ -22,6 +23,7 @@ function mmdd(d: string) {
 
 /** 看板「成交额」KPI 点击弹窗：近 N 个交易日全市场成交额柱状图（本地仓库，A 股口径）。 */
 export function TurnoverHistoryDialog({ onClose, liveToday }: Props) {
+  const ct = useChartTheme()
   const [days, setDays] = useState<number>(60)
   const q = useQuery({
     queryKey: ['amount-history', days],
@@ -94,18 +96,18 @@ export function TurnoverHistoryDialog({ onClose, liveToday }: Props) {
                 symbol: 'none',
                 label: {
                   formatter: `均值 ${fmtBigNum(avg)}`,
-                  color: '#94a3b8',
+                  color: ct.name === 'light' ? ct.text : '#94a3b8',
                   fontSize: 10,
                   position: 'insideEndTop',
                 },
-                lineStyle: { color: '#64748b', type: 'dashed', width: 1 },
+                lineStyle: { color: ct.name === 'light' ? ct.border : '#64748b', type: 'dashed', width: 1 },
                 data: [{ yAxis: avg }],
               }
             : undefined,
         },
       ],
     }),
-    [series, avg, liveDates],
+    [series, avg, liveDates, ct],
   )
 
   return (

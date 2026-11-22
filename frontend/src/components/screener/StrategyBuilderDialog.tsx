@@ -409,8 +409,8 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
     <Modal
       onClose={handleClose}
       labelledBy="strategy-builder-title"
-      overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      panelClassName="w-[820px] max-h-[88vh] bg-surface/95 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+      overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      panelClassName="w-[820px] max-h-[88vh] bg-surface-850 border border-border/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
     >
 
           {/* 标题 */}
@@ -447,7 +447,7 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
               <div className="flex items-center gap-2 text-[11px]">
                 <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                 <span className="text-amber-400/80">步骤 1 描述策略规则 → 步骤 2 预览代码 → 保存</span>
-                <a href="https://github.com/shy3130/tickflow-stock-panel/blob/main/backend/app/strategy/prompts/strategy-guide.md"
+                <a href="/docs/strategy-guide.md"
                    target="_blank" rel="noopener noreferrer"
                    className="inline-flex items-center gap-1 text-accent/70 hover:text-accent transition-colors">
                   <FileText className="h-3 w-3" />策略开发指南
@@ -457,7 +457,7 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
               <div className="flex items-center gap-2 text-[11px]">
                 <Terminal className="h-3.5 w-3.5 text-accent shrink-0" />
                 <span className="text-muted">适合有 Python 基础的开发者，手动编写策略文件进行深度定制和二次开发</span>
-                <a href="https://github.com/shy3130/tickflow-stock-panel/blob/main/backend/app/strategy/prompts/strategy-guide.md"
+                <a href="/docs/strategy-guide.md"
                    target="_blank" rel="noopener noreferrer"
                    className="inline-flex items-center gap-1 text-accent/70 hover:text-accent transition-colors">
                   <FileText className="h-3 w-3" />策略开发指南

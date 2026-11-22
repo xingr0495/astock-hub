@@ -42,10 +42,17 @@ def refresh_qfq_daily(cfg: dict) -> dict:
     if not raw_last or not qfq_last or qfq_last >= raw_last:
         return {"ok": True, "message": "qfq 已是最新", "qfq_to": qfq_last}
 
-    new_days = sorted(d for d in set(raw["_d"].to_list())
-                      - set(qfq["_d"].to_list()) if d > qfq_last)
+    # 唯一日期用 polars 原生 unique 去重后取小列表——raw["_d"].to_list() 会把
+    # 800 万行日期字符串整个转 Python list（约 800MB 对象），16:00 链内存紧张时
+    # 触发 polars 空指针 PanicException（2026-11-19 断更根因）；unique 在 Rust 层
+    # 去重，仅 ~1700 个日期回 Python，快且不再偶发崩溃。
+    raw_days = set(raw["_d"].unique().to_list())
+    new_days = sorted(d for d in raw_days - set(qfq["_d"].unique().to_list())
+                      if d > qfq_last)
     if not new_days:
         return {"ok": True, "message": "无新增交易日"}
+
+    all_days = sorted(raw_days)  # 循环内复用，不再逐日重复 to_list
 
     cache_df = _load_factor_cache(store)
     rebuild_data: dict[str, dict] = {}
@@ -55,7 +62,7 @@ def refresh_qfq_daily(cfg: dict) -> dict:
     add_frames: list[pl.DataFrame] = []
 
     for day in new_days:
-        prev = max(d for d in set(raw["_d"].to_list()) if d < day)
+        prev = max(d for d in all_days if d < day)
         raw_day = raw.filter(pl.col("_d") == day)
         raw_prev = (raw.filter(pl.col("_d") == prev)
                     .select(["symbol", "close"])

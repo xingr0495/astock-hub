@@ -1,17 +1,29 @@
-import { useEffect, useState, useRef } from 'react'
+import { Fragment, useEffect, useState, useRef } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Menu, X, Pencil, RotateCcw, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react'
+import { Menu, X, Pencil, RotateCcw, ChevronUp, ChevronDown, Eye, EyeOff, Sun, Moon } from 'lucide-react'
+import { toggleTheme, useTheme } from '../lib/theme'
 import ChatWidget from './ChatWidget'
+import QuickOpen from './QuickOpen'
 import { ToastContainer } from './Toast'
 import { useAuth } from '../auth'
+
+// 轻量分组标题（A2-6）：仅展示分组，不影响现有排序/隐藏逻辑
+const GROUP_OF: Record<string, string> = {
+  '/': '看盘', '/dashboard': '看盘', '/market-overview': '看盘',
+  '/sector': '看盘', '/review': '看盘',
+  '/watchlist': '选股', '/screen': '选股', '/pool': '选股',
+  '/backtest': '交易与回测', '/trading': '交易与回测', '/paper': '交易与回测',
+  '/news': '资讯', '/settings': '设置',
+}
 
 // perm/admin 可选字段（规格 §1 权限模型）：无字段 = view_market 默认档可见；
 // perm 走普通权限键（管理员直通），admin: true 仅管理员。
 const NAV: { to: string; label: string; perm?: string; admin?: boolean;
-             feature?: string }[] = [
+             feature?: string; featureAny?: string[] }[] = [
   { to: '/', label: '个股分析' },
   { to: '/watchlist', label: '自选股', perm: 'watchlist' },
   { to: '/dashboard', label: '实时看板' },
+  { to: '/market-overview', label: '市场总览' },
   { to: '/sector', label: '板块分析' },
   { to: '/review', label: '大盘复盘', perm: 'view_review' },
   { to: '/screen', label: '策略选股' },
@@ -69,8 +81,23 @@ function linkClass(isActive: boolean): string {
   }`
 }
 
+function ThemeToggle() {
+  const theme = useTheme()
+  const dark = theme === 'dark'
+  return (
+    <button
+      onClick={() => toggleTheme()}
+      aria-label={dark ? '切换到日间模式' : '切换到夜间模式'}
+      title={dark ? '切换到日间模式' : '切换到夜间模式'}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-surface-700 hover:text-slate-200"
+    >
+      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
+  )
+}
+
 export default function Layout() {
-  const { user, can, isAdmin, logout, features } = useAuth()
+  const { can, isAdmin, features } = useAuth()
   const [drawer, setDrawer] = useState(false)
   const [navOrder, setNavOrder] = useState<string[]>(() => mergeOrder(loadKeys(ORDER_KEY)))
   const [navHidden, setNavHidden] = useState<Set<string>>(() => new Set(loadKeys(HIDDEN_KEY)))
@@ -115,7 +142,8 @@ export default function Layout() {
   // 权限过滤（规格 §1）：admin 项仅管理员；perm 项管理员直通、普通用户按 perms
   const navVisible = (n: (typeof NAV)[number]) =>
     (!n.admin || isAdmin) && (!n.perm || isAdmin || can(n.perm)) &&
-    (!n.feature || !!features[n.feature])
+    (!n.feature || !!features[n.feature]) &&
+    (!n.featureAny || n.featureAny.some((f) => !!features[f]))
   const visibleNav = orderedNav.filter((n) => navVisible(n) && !navHidden.has(n.to))
   // 编辑模式仅管理员可进（按钮对非管理员不渲染，双保险：状态置真也不进编辑态）
   const editing = editNav && isAdmin
@@ -147,12 +175,20 @@ export default function Layout() {
   }
 
   /** 侧栏条目：编辑态显示上下移动 + 显隐按钮，普通态是链接（手机抽屉点击后收起） */
-  const renderItems = (onNavigate?: () => void) =>
-    renderNav.map(({ to, label }) => {
+  const renderItems = (onNavigate?: () => void) => {
+    let lastGroup = ''
+    return renderNav.map(({ to, label }) => {
+      const group = GROUP_OF[to] ?? ''
+      const header = group && group !== lastGroup ? (
+        <div key={`g-${group}`} className="px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          {group}
+        </div>
+      ) : null
+      lastGroup = group || lastGroup
       const idx = orderedNav.findIndex((n) => n.to === to)
       const hidden = navHidden.has(to)
       if (editing) {
-        return (
+        return (<Fragment key={to}>{header}
           <div
             key={to}
             className={`flex items-center gap-1 rounded-md px-2 py-1.5 text-sm md:py-1 ${
@@ -184,9 +220,9 @@ export default function Layout() {
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
           </div>
-        )
+        </Fragment>)
       }
-      return (
+      return (<Fragment key={to}>{header}
         <NavLink
           key={to}
           to={to}
@@ -196,8 +232,9 @@ export default function Layout() {
         >
           {label}
         </NavLink>
-      )
+      </Fragment>)
     })
+  }
 
   const editBar = (
     <div className="flex items-center gap-1 px-2 pb-1">
@@ -218,12 +255,13 @@ export default function Layout() {
     </div>
   )
 
-  // 底部用户条：机主单用户（无退出登录）
+  // 底部用户条：机主单用户，无退出登录；保留主题切换。
   const userBar = (
     <div className="mb-2 flex items-center justify-between gap-1 rounded-md bg-surface-800 px-2 py-1.5">
-      <span className="truncate text-[11px] text-slate-300" title="机主（单用户）">
+      <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300" title="机主（单用户）">
         👑 机主
       </span>
+      <ThemeToggle />
     </div>
   )
 
@@ -232,10 +270,11 @@ export default function Layout() {
       {/* 桌面侧边栏（≥768px 原样保留） */}
       <aside className="hidden w-44 shrink-0 flex-col border-r border-surface-700 bg-surface-850 md:flex">
         <div className="flex items-center gap-2 px-4 py-5">
-          <img src="/mind-ashare-logo.png" alt="Mind AShare" className="h-9 w-9 rounded-lg object-cover" />
+          <img src="/mind-ashare-logo.png" alt="Mind AShare Logo" className="h-9 w-9 rounded-lg object-cover" />
           <div>
-            <div className="text-sm font-semibold text-slate-100">astock-hub</div>
-            <div className="text-[11px] text-slate-400">Mind AShare · A股数据面板</div>
+            <div className="text-sm font-semibold text-slate-100">Mind AShare</div>
+            <div className="text-[11px] text-slate-400">A股五维投研</div>
+            <div className="mt-1 text-[9px] leading-relaxed text-slate-500">Mind-Astock: Your AI Co-Pilot for A-Share Alpha</div>
           </div>
         </div>
         <nav className="mt-2 flex flex-col gap-1 px-2">
@@ -274,8 +313,9 @@ export default function Layout() {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="text-sm font-semibold text-slate-100"><img src="/mind-ashare-logo.png" alt="" className="inline h-5 w-5 rounded object-cover" /> astock-hub</span>
-        <span className="text-[11px] text-slate-500">Mind AShare</span>
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-100"><img src="/mind-ashare-logo.png" alt="" className="h-5 w-5 rounded object-cover" />Mind AShare</span>
+        <span className="text-[11px] text-slate-500">A股五维投研</span>
+        <div className="ml-auto"><ThemeToggle /></div>
       </div>
 
       {/* 手机侧滑抽屉（<768px） */}
@@ -287,7 +327,10 @@ export default function Layout() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-4">
-              <span className="text-sm font-semibold text-slate-100"><img src="/mind-ashare-logo.png" alt="" className="inline h-5 w-5 rounded object-cover" /> astock-hub</span>
+              <div>
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-100"><img src="/mind-ashare-logo.png" alt="" className="h-5 w-5 rounded object-cover" />Mind AShare</span>
+                <div className="mt-1 max-w-40 text-[9px] leading-relaxed text-slate-500">Mind-Astock: Your AI Co-Pilot for A-Share Alpha</div>
+              </div>
               <button
                 onClick={() => setDrawer(false)}
                 aria-label="关闭菜单"
@@ -330,7 +373,7 @@ export default function Layout() {
       </main>
 
       {/* AI 对话悬浮框：fixed 定位不进文档流，挂在 main 之后 → 所有路由页面可用；权限闸=管理员或 ai_chat */}
-      {(isAdmin || can('ai_chat')) && <ChatWidget />}
+      {(isAdmin || can('ai_chat')) && (<><QuickOpen /><ChatWidget /></>)}
       {/* 全局 toast 容器（模拟盘加股等轻反馈；fixed 右下角不进文档流） */}
       <ToastContainer />
     </div>
