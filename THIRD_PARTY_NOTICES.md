@@ -6,6 +6,16 @@ astock-hub 使用了以下第三方组件。按"代码是否随本包交付"分�
 
 ---
 
+## 鸣谢
+
+- **a-stock-data（simonlin1212/a-stock-data）**：感谢 Simon 林及贡献者提供行情与数据获取工具。
+- **tick-stock-panel（shy3130/tick-stock-panel）**：感谢 shy3130 及贡献者提供指标与面板参考。
+- **TradingAgents-astock**：感谢 Simon 林及贡献者提供多 Agent 研究框架，并感谢上游 TauricResearch/TradingAgents 的作者与贡献者。
+- **国家队持仓估计**：感谢项目作者及维护者提供宽基 ETF 份额估计方法与数据口径。
+- **investment-news**：感谢 Simon 林及贡献者提供全球产业资讯管道与策展思路。
+
+---
+
 ## 一、代码被移植/复制进本包的组件（必须保留其许可）
 
 ### a-stock-data（simonlin1212/a-stock-data）

@@ -63,6 +63,18 @@ This application uses a **single-owner model without built-in access control**. 
 
 Backtesting, paper-trading decision chains, live trading, private document pools, and private strategy modules are outside the current repository's scope.
 
+## Acknowledgements
+
+We thank the following projects, authors, and contributors for their code, data interfaces, and research ideas:
+
+- **a-stock-data** — Simon Lin (simonlin1212) and contributors.
+- **tick-stock-panel** — shy3130 and contributors.
+- **TradingAgents-astock** — Simon Lin and contributors, together with the upstream TauricResearch/TradingAgents authors.
+- **National Team Position Estimation** — the project authors and maintainers, for the broad-based ETF share methodology used to observe national-team fund flows.
+- **investment-news** — Simon Lin and contributors, for the global industry-news pipeline and curation approach.
+
+Code licensing does not grant data redistribution rights. Provider terms still apply.
+
 ## License and disclaimer
 
 MIT licensed. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -54,6 +54,20 @@ def test_strategy_catalog_imports_with_declared_dependencies():
     assert list_available_strategies()
 
 
+def test_acknowledgement_projects_and_authors_are_present():
+    required = (
+        "TradingAgents-astock", "国家队持仓估计", "investment-news",
+        "shy3130/tick-stock-panel", "simonlin1212/a-stock-data",
+    )
+    for relative in ("README.md", "THIRD_PARTY_NOTICES.md"):
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        assert "鸣谢" in text
+        for project in required:
+            assert project in text, f"{relative}: {project}"
+        section = text.split("## 鸣谢", 1)[1].split("\n## ", 1)[0]
+        assert "](http" not in section
+
+
 def test_readme_image_links_exist():
     for name in ("README.md", "README_EN.md"):
         text = (ROOT / name).read_text(encoding="utf-8")
