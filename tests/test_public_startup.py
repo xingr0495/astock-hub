@@ -68,6 +68,17 @@ def test_acknowledgement_projects_and_authors_are_present():
         assert "](http" not in section
 
 
+def test_cloud_installation_guide_is_public_and_complete():
+    text = (ROOT / "docs" / "CLOUD_DEPLOYMENT.md").read_text(encoding="utf-8")
+    for section in ("完成本教程后", "准备服务器", "安装系统环境", "配置开机启动",
+                    "初始化或导入公开数据", "完整验收顺序", "常见问题", "升级与回滚"):
+        assert section in text
+    for private_value in ("123.60.166.152", "112.49.138.181", "43.142.149.61",
+                          "MindAShare-License-Center", "发布免费版到 GitHub"):
+        assert private_value not in text
+    assert "docs/CLOUD_DEPLOYMENT.md" in (ROOT / "README.md").read_text(encoding="utf-8")
+
+
 def test_readme_image_links_exist():
     for name in ("README.md", "README_EN.md"):
         text = (ROOT / name).read_text(encoding="utf-8")

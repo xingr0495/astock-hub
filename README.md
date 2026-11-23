@@ -156,6 +156,7 @@ bash install.sh --start
 - [macOS（Intel / Apple Silicon）](docs/INSTALL.md#三macosintel--apple-silicon)
 - [Fedora / Arch](docs/INSTALL.md#四其他-linux)
 - [云服务器与 SSH 安全访问](docs/INSTALL.md#五云服务器安装与安全访问)
+- [云服务器新手详细教程](docs/CLOUD_DEPLOYMENT.md)
 - [手机、平板与局域网访问](docs/INSTALL.md#六手机平板和局域网访问)
 
 ### 初始化全市场数据（按需）
