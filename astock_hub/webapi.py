@@ -28,6 +28,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import polars as pl
 
+from .adapters import global_index
 from . import models
 from .config import PROJECT_ROOT, load_config
 from .core.bundle import build_bundle
@@ -1570,17 +1571,41 @@ def api_valuation(code: str):
 
 @app.get(f"{API_PREFIX}/indexes")
 def api_indexes():
-    """六大指数行情快照（市场总览页）。hithink 索引快照（iFinD 已停用——额度耗尽，
-    2026-10-08 用户决策暂时全面停用）。
-    返回结构与前端契约一致：item[].{thscode,last_price,price_change_ratio_pct,...}。"""
+    """六大指数行情快照；hithink 不可用时回退腾讯免费指数源。"""
     INDEXES = ["000001.SH", "399001.SZ", "399006.SZ", "000688.SH",
                "000300.SH", "000905.SH"]
     adapter = _get_adapters()["hithink"]
-    envelope, cmd = adapter._run(
-        ["index", "snapshot", "--thscodes", ",".join(INDEXES)])
-    data = envelope.get("data") or {}
-    return _json(models.Envelope(command="indexes",
-                                 query={"source": "hithink"}, data=data).to_dict())
+    try:
+        envelope, cmd = adapter._run(
+            ["index", "snapshot", "--thscodes", ",".join(INDEXES)])
+        data = envelope.get("data") or {}
+        if data.get("item"):
+            return _json(models.Envelope(command="indexes",
+                                         query={"source": "hithink"}, data=data).to_dict())
+    except Exception:  # noqa: BLE001 — 未安装/未授权时走免费源
+        pass
+    try:
+        quotes = global_index.quotes(INDEXES)
+        items = [{
+            "thscode": q["symbol"], "name": q.get("name"),
+            "last_price": q.get("price"),
+            "price_change_ratio_pct": q.get("change_pct"),
+            "turnover": q.get("amount"),
+        } for q in quotes]
+        stamps = [q.get("timestamp") for q in quotes if q.get("timestamp")]
+        as_of = None
+        if stamps:
+            from datetime import datetime
+            as_of = datetime.fromtimestamp(max(stamps) / 1000).date().isoformat()
+        return _json(models.Envelope(
+            command="indexes", query={"source": "tencent"},
+            data={"item": items, "total": len(items), "as_of": as_of}).to_dict())
+    except Exception as exc:  # noqa: BLE001 — 双源失败也不能让总览页 500
+        env = models.Envelope(command="indexes", query={"source": "tencent"})
+        env.data = models.DimensionResult(
+            status=models.UNAVAILABLE, source="global-index/tencent",
+            data={"item": [], "hint": f"指数数据源暂不可用：{exc}"}).to_dict()
+        return _json(env.to_dict())
 
 
 @app.get(f"{API_PREFIX}/quotes")

@@ -563,9 +563,11 @@ def symbol_names(cfg: dict, *, force: bool = False) -> pl.DataFrame:
     df = pl.DataFrame({"symbol": [p[0] for p in pairs],
                        "name": [p[1] for p in pairs]}).unique(subset=["symbol"])
     if df.height == 0:
-        # 远端失败/空结果绝不落缓存：空 list 在 polars 是 Null 型，一旦写入
-        # 24h 内所有 join 名字的调用都会 SchemaError（2026-11-03 云上实测中毒）
-        logger.warning("名称映射获取为空（远端失败？）——不写缓存直接返回")
+        # 远端失败/空结果绝不落缓存；已有名称表即使过一天也比没有名称可靠。
+        if out.exists():
+            logger.warning("名称映射远端不可用，回退已有缓存：%s", out)
+            return pl.read_parquet(out)
+        logger.warning("名称映射获取为空（远端失败且无缓存）——不写缓存直接返回")
         return df
     tmp = out.with_suffix(".part.parquet")
     df.write_parquet(tmp)
